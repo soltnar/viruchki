@@ -197,7 +197,8 @@ h2 {
 }
 
 #exportPdf,
-#downloadLog {
+#downloadLog,
+#exportExcel {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;

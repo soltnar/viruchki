@@ -26,6 +26,7 @@ const els = {
   compareStats: document.getElementById("compareStats"),
   viewWarehouses: document.getElementById("viewWarehouses"),
   detailSort: document.getElementById("detailSort"),
+  exportExcel: document.getElementById("exportExcel"),
   exportPdf: document.getElementById("exportPdf"),
   downloadLog: document.getElementById("downloadLog"),
   tableBody: document.getElementById("tableBody"),
@@ -61,6 +62,7 @@ els.detailSort.addEventListener("change", () => {
   state.detailSort = els.detailSort.value || "revenue_desc";
   renderTable(state.filteredRows);
 });
+els.exportExcel.addEventListener("click", exportToExcelPivot);
 els.exportPdf.addEventListener("click", exportToPdf);
 els.downloadLog.addEventListener("click", downloadDebugLog);
 toggleCompareCustom();
@@ -1151,6 +1153,70 @@ function sortGroupRows(a, b) {
 
 function exportToPdf() {
   window.print();
+}
+
+function exportToExcelPivot() {
+  if (!state.filteredRows.length) {
+    alert("Нет данных для экспорта.");
+    return;
+  }
+
+  const dateSet = new Set();
+  const restaurantMap = new Map();
+  state.filteredRows.forEach((row) => {
+    if (!row.date || row.date === "Без даты") return;
+    dateSet.add(row.date);
+    const m = restaurantMap.get(row.group) || new Map();
+    m.set(row.date, (m.get(row.date) || 0) + row.revenue);
+    restaurantMap.set(row.group, m);
+  });
+
+  const dates = Array.from(dateSet).sort((a, b) => a.localeCompare(b));
+  if (!dates.length) {
+    alert("Нет дат для экспорта.");
+    return;
+  }
+
+  const header = ["Ресторан", ...dates.map((d) => formatDate(d)), "Итого"];
+  const body = [];
+
+  const totalRow = ["Итого"];
+  let grandTotal = 0;
+  dates.forEach((date) => {
+    let daySum = 0;
+    restaurantMap.forEach((dateMap) => {
+      daySum += dateMap.get(date) || 0;
+    });
+    totalRow.push(round2(daySum));
+    grandTotal += daySum;
+  });
+  totalRow.push(round2(grandTotal));
+  body.push(totalRow);
+
+  const restaurants = Array.from(restaurantMap.keys()).sort((a, b) => a.localeCompare(b, "ru"));
+  restaurants.forEach((restaurant) => {
+    const dateMap = restaurantMap.get(restaurant);
+    const row = [restaurant];
+    let rowTotal = 0;
+    dates.forEach((date) => {
+      const value = dateMap.get(date) || 0;
+      row.push(round2(value));
+      rowTotal += value;
+    });
+    row.push(round2(rowTotal));
+    body.push(row);
+  });
+
+  const aoa = [header, ...body];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Выручка");
+  const stamp = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `выручка_по_ресторанам_${stamp}.xlsx`);
+}
+
+function round2(n) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 function splitRestaurantName(name) {

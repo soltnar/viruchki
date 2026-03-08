@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260308-33" />
+    <link rel="stylesheet" href="./styles.css?v=20260308-34" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
@@ -20,7 +20,7 @@
           Загрузите один или несколько Excel-файлов. Сайт соберет данные по датам и ресторанам,
           покажет динамику и итоговую таблицу.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-03-08.33</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-03-08.34</span></p>
       </header>
 
       <section class="panel upload-panel">
@@ -112,6 +112,7 @@
               <option value="name_desc">По имени (Я -> А)</option>
             </select>
           </label>
+          <button id="exportExcel" type="button">Экспорт в Excel</button>
           <button id="exportPdf" type="button">Экспорт в PDF</button>
         </div>
         <h2>Итоги по датам</h2>
@@ -143,6 +144,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./script.js?v=20260308-33"></script>
+    <script src="./script.js?v=20260308-34"></script>
   </body>
 </html>

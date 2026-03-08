@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260308-24" />
+    <link rel="stylesheet" href="./styles.css?v=20260308-32" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
@@ -20,15 +20,16 @@
           Загрузите один или несколько Excel-файлов. Сайт соберет данные по датам и ресторанам,
           покажет динамику и итоговую таблицу.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-03-08.24</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-03-08.32</span></p>
       </header>
 
       <section class="panel upload-panel">
         <label class="upload-label" for="files">Excel-файлы (.xlsx)</label>
         <input id="files" type="file" accept=".xlsx" multiple />
         <p class="hint">Поддерживаются отчеты с колонками типа «Сумма», «Продажа», «Выручка».</p>
-        <p class="hint" id="debugInfo"></p>
-        <p class="hint" id="parseNotice"></p>
+        <div class="table-controls">
+          <button id="downloadLog" type="button">Скачать debug-log.json</button>
+        </div>
       </section>
 
       <section class="panel filters">
@@ -36,14 +37,6 @@
           <label for="restaurantFilter">Рестораны (мультивыбор)</label>
           <select id="restaurantFilter" multiple size="6"></select>
           <p class="hint">Ctrl/Cmd + клик для выбора нескольких.</p>
-        </div>
-        <div class="filter-group">
-          <label for="dateFrom">С даты</label>
-          <input id="dateFrom" type="date" />
-        </div>
-        <div class="filter-group">
-          <label for="dateTo">По дату</label>
-          <input id="dateTo" type="date" />
         </div>
         <div class="filter-group">
           <label for="warehouseType">Тип склада</label>
@@ -60,6 +53,46 @@
       <section class="panel stats" id="stats"></section>
 
       <section class="panel">
+        <h2>Сравнение периодов</h2>
+        <div class="filters">
+          <div class="filter-group">
+            <label for="dateFrom">Текущий период: с даты</label>
+            <input id="dateFrom" type="date" />
+          </div>
+          <div class="filter-group">
+            <label for="dateTo">Текущий период: по дату</label>
+            <input id="dateTo" type="date" />
+          </div>
+          <div class="filter-group">
+            <label for="compareMode">Режим сравнения</label>
+            <select id="compareMode">
+              <option value="wow">Неделя к неделе</option>
+              <option value="mom">Месяц к месяцу</option>
+              <option value="yoy">Год к году</option>
+              <option value="custom">Пользовательский</option>
+            </select>
+          </div>
+          <div class="filter-group compare-preset" id="comparePeriodAGroup">
+            <label for="comparePeriodA">Период A</label>
+            <select id="comparePeriodA"></select>
+          </div>
+          <div class="filter-group compare-preset" id="comparePeriodBGroup">
+            <label for="comparePeriodB">Период B</label>
+            <select id="comparePeriodB"></select>
+          </div>
+          <div class="filter-group compare-custom" id="compareCustomGroup">
+            <label for="comparePrevFrom">Предыдущий период: с даты</label>
+            <input id="comparePrevFrom" type="date" />
+          </div>
+          <div class="filter-group compare-custom">
+            <label for="comparePrevTo">Предыдущий период: по дату</label>
+            <input id="comparePrevTo" type="date" />
+          </div>
+        </div>
+        <div class="stats compare-stats" id="compareStats"></div>
+      </section>
+
+      <section class="panel">
         <h2>График по дням</h2>
         <canvas id="chart" height="90"></canvas>
       </section>
@@ -71,6 +104,15 @@
             <input id="viewWarehouses" type="checkbox" checked />
             Показывать склады внутри ресторана
           </label>
+          <label class="table-toggle" for="detailSort">
+            Сортировка детализации
+            <select id="detailSort">
+              <option value="revenue_desc">По выручке (больше -> меньше)</option>
+              <option value="name_asc">По имени (А -> Я)</option>
+              <option value="name_desc">По имени (Я -> А)</option>
+            </select>
+          </label>
+          <button id="exportPdf" type="button">Экспорт в PDF</button>
         </div>
         <h2>Итоги по датам</h2>
         <div class="table-wrap">
@@ -101,6 +143,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./script.js?v=20260308-24"></script>
+    <script src="./script.js?v=20260308-32"></script>
   </body>
 </html>

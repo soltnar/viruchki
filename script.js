@@ -2,8 +2,12 @@ const state = {
   rows: [],
   filteredRows: [],
   expandedGroups: new Set(),
-  showWarehouses: true
+  showWarehouses: true,
+  detailSort: "revenue_desc",
+  compareOptions: []
 };
+
+const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 
 const els = {
   files: document.getElementById("files"),
@@ -11,33 +15,62 @@ const els = {
   dateFrom: document.getElementById("dateFrom"),
   dateTo: document.getElementById("dateTo"),
   warehouseType: document.getElementById("warehouseType"),
+  compareMode: document.getElementById("compareMode"),
+  comparePeriodA: document.getElementById("comparePeriodA"),
+  comparePeriodB: document.getElementById("comparePeriodB"),
+  comparePeriodAGroup: document.getElementById("comparePeriodAGroup"),
+  comparePeriodBGroup: document.getElementById("comparePeriodBGroup"),
+  comparePrevFrom: document.getElementById("comparePrevFrom"),
+  comparePrevTo: document.getElementById("comparePrevTo"),
+  compareCustomGroup: document.getElementById("compareCustomGroup"),
+  compareStats: document.getElementById("compareStats"),
   viewWarehouses: document.getElementById("viewWarehouses"),
+  detailSort: document.getElementById("detailSort"),
+  exportPdf: document.getElementById("exportPdf"),
+  downloadLog: document.getElementById("downloadLog"),
   tableBody: document.getElementById("tableBody"),
   dateTotalsBody: document.getElementById("dateTotalsBody"),
   stats: document.getElementById("stats"),
-  chart: document.getElementById("chart"),
-  debugInfo: document.getElementById("debugInfo"),
-  parseNotice: document.getElementById("parseNotice")
+  chart: document.getElementById("chart")
 };
 
 let chartCtx = null;
+
+initDebugLogging();
 
 els.files.addEventListener("change", handleFiles);
 els.restaurantFilter.addEventListener("change", applyFilters);
 els.dateFrom.addEventListener("change", applyFilters);
 els.dateTo.addEventListener("change", applyFilters);
 els.warehouseType.addEventListener("change", applyFilters);
+els.compareMode.addEventListener("change", () => {
+  toggleCompareCustom();
+  updateComparePeriodSelectors(state.rows);
+  applyFilters();
+});
+els.comparePeriodA.addEventListener("change", applyFilters);
+els.comparePeriodB.addEventListener("change", applyFilters);
+els.comparePrevFrom.addEventListener("change", applyFilters);
+els.comparePrevTo.addEventListener("change", applyFilters);
 els.tableBody.addEventListener("click", onTableClick);
 els.viewWarehouses.addEventListener("change", () => {
   state.showWarehouses = Boolean(els.viewWarehouses.checked);
   renderTable(state.filteredRows);
 });
+els.detailSort.addEventListener("change", () => {
+  state.detailSort = els.detailSort.value || "revenue_desc";
+  renderTable(state.filteredRows);
+});
+els.exportPdf.addEventListener("click", exportToPdf);
+els.downloadLog.addEventListener("click", downloadDebugLog);
+toggleCompareCustom();
 
 function handleFiles(event) {
   const files = Array.from(event.target.files || []);
   if (!files.length) return;
 
   if (typeof XLSX === "undefined") {
+    appendDebugLog("error", "xlsx_not_loaded", {});
     alert("Библиотека XLSX не загрузилась. Проверьте интернет и обновите страницу (Cmd+Shift+R).");
     return;
   }
@@ -49,24 +82,85 @@ function handleFiles(event) {
       const notices = results.flatMap((r) => r.notices);
       state.rows = aggregateRows(allRows);
       state.expandedGroups.clear();
-      if (els.debugInfo) {
-        els.debugInfo.textContent = `Найдено строк выручки: ${state.rows.length}. ${debugLines.join(" | ")}`;
-      }
-      if (els.parseNotice) {
-        els.parseNotice.textContent = notices.join(" | ");
-      }
-      console.log("[revenue-debug] results", results);
+      appendDebugLog("info", "file_parse_summary", {
+        rows_count: state.rows.length,
+        debug: debugLines,
+        notices
+      });
       if (!state.rows.length) {
+        appendDebugLog("warn", "no_rows_found", { files: files.map((f) => f.name) });
         alert("Не удалось найти строки выручки в файле. Проверьте структуру отчета.");
       }
       populateRestaurantFilter(state.rows);
+      updateComparePeriodSelectors(state.rows);
       applyFilters();
     })
     .catch((error) => {
       console.error(error);
       const reason = error && error.message ? `\n\nДетали: ${error.message}` : "";
+      appendDebugLog("error", "file_parse_failed", {
+        message: error && error.message ? error.message : "unknown_error"
+      });
       alert(`Ошибка чтения файла .xlsx.${reason}`);
     });
+}
+
+function appendDebugLog(level, event, data) {
+  let list = [];
+  try {
+    list = JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || "[]");
+    if (!Array.isArray(list)) list = [];
+  } catch {
+    list = [];
+  }
+  list.push({
+    ts: new Date().toISOString(),
+    level,
+    event,
+    data
+  });
+  if (list.length > 500) list = list.slice(list.length - 500);
+  localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(list));
+}
+
+function initDebugLogging() {
+  appendDebugLog("info", "app_start", { version: "2026-03-08.28" });
+  window.addEventListener("error", (evt) => {
+    appendDebugLog("error", "window_error", {
+      message: evt.message || "unknown_window_error",
+      file: evt.filename || "",
+      line: evt.lineno || 0,
+      column: evt.colno || 0
+    });
+  });
+  window.addEventListener("unhandledrejection", (evt) => {
+    const reason = evt.reason && evt.reason.message ? evt.reason.message : String(evt.reason || "");
+    appendDebugLog("error", "unhandled_rejection", { reason });
+  });
+}
+
+function downloadDebugLog() {
+  let list = [];
+  try {
+    list = JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || "[]");
+    if (!Array.isArray(list)) list = [];
+  } catch {
+    list = [];
+  }
+  const payload = {
+    appVersion: "2026-03-08.28",
+    exportedAt: new Date().toISOString(),
+    logs: list
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "debug-log.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function parseFile(file) {
@@ -604,6 +698,8 @@ function isBlockedRestaurantName(value) {
   if (key.includes("бургер бик") && key.includes("чайка")) return true;
   if (key === "бургер бик") return true;
   if (key.includes("фабрика разделка")) return true;
+  if (key.includes("шале") && key.includes("15")) return true;
+  if (key.includes("совнаркомовская") && key.includes("13")) return true;
   if (key.includes("нто ооо приспех") && key.includes("гагарина") && key.includes("35")) return true;
   return false;
 }
@@ -681,18 +777,214 @@ function applyFilters() {
   const selectedWarehouseTypes = Array.from(els.warehouseType.selectedOptions || []).map((o) => o.value);
   const groupWarehouseCount = getGroupWarehouseCount(state.rows);
 
-  state.filteredRows = state.rows.filter((row) => {
+  const baseRows = state.rows.filter((row) => {
     if (selectedRestaurants.length && !selectedRestaurants.includes(row.group)) return false;
-    if (from && row.date !== "Без даты" && row.date < from) return false;
-    if (to && row.date !== "Без даты" && row.date > to) return false;
     if (!matchesWarehouseType(row, selectedWarehouseTypes, groupWarehouseCount)) return false;
     return true;
   });
 
+  state.filteredRows = baseRows.filter((row) => {
+    if (from && row.date !== "Без даты" && row.date < from) return false;
+    if (to && row.date !== "Без даты" && row.date > to) return false;
+    return true;
+  });
+
   renderStats(state.filteredRows);
+  renderComparison(baseRows, from, to);
   renderDateTotals(state.filteredRows);
   renderTable(state.filteredRows);
   renderChart(state.filteredRows);
+}
+
+function toggleCompareCustom() {
+  const isCustom = (els.compareMode.value || "wow") === "custom";
+  const customGroups = document.querySelectorAll(".compare-custom");
+  customGroups.forEach((el) => el.classList.toggle("visible", isCustom));
+  const presetGroups = document.querySelectorAll(".compare-preset");
+  presetGroups.forEach((el) => el.classList.toggle("visible", !isCustom));
+}
+
+function renderComparison(rows, from, to) {
+  const currentRange = resolveCurrentRange(rows, from, to);
+  if (!currentRange) {
+    els.compareStats.innerHTML = '<article class="stat"><p class="stat-title">Сравнение</p><p class="stat-value">Выберите период</p></article>';
+    return;
+  }
+
+  const mode = els.compareMode.value || "wow";
+  const previousRange = resolvePreviousRange(currentRange, mode);
+  if (!previousRange) {
+    els.compareStats.innerHTML = '<article class="stat"><p class="stat-title">Сравнение</p><p class="stat-value">Укажите предыдущий период</p></article>';
+    return;
+  }
+
+  const currentTotal = sumByRange(rows, currentRange.from, currentRange.to);
+  const previousTotal = sumByRange(rows, previousRange.from, previousRange.to);
+  const diff = currentTotal - previousTotal;
+  const pct = previousTotal === 0 ? null : (diff / previousTotal) * 100;
+
+  els.compareStats.innerHTML = `
+    <article class="stat">
+      <p class="stat-title">Текущий период (${formatDate(currentRange.from)} - ${formatDate(currentRange.to)})</p>
+      <p class="stat-value">${formatMoney(currentTotal)}</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Предыдущий период (${formatDate(previousRange.from)} - ${formatDate(previousRange.to)})</p>
+      <p class="stat-value">${formatMoney(previousTotal)}</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Разница</p>
+      <p class="stat-value">${diff >= 0 ? "+" : ""}${formatMoney(diff)}${pct == null ? "" : ` (${diff >= 0 ? "+" : ""}${pct.toFixed(1)}%)`}</p>
+    </article>
+  `;
+}
+
+function resolveCurrentRange(rows, from, to) {
+  if (from && to) return { from, to };
+  const dated = rows.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(String(r.date || "")));
+  if (!dated.length) return null;
+  const dates = dated.map((r) => r.date).sort((a, b) => a.localeCompare(b));
+  return { from: from || dates[0], to: to || dates[dates.length - 1] };
+}
+
+function resolvePreviousRange(currentRange, mode) {
+  if (!currentRange) return null;
+  if (mode === "custom") {
+    const prevFrom = normalizeFilterDate(els.comparePrevFrom.value);
+    const prevTo = normalizeFilterDate(els.comparePrevTo.value);
+    if (!prevFrom || !prevTo) return null;
+    return { from: prevFrom, to: prevTo };
+  }
+  const selectedA = els.comparePeriodA.value;
+  const selectedB = els.comparePeriodB.value;
+  if (selectedA && selectedB) {
+    const optA = state.compareOptions.find((o) => o.key === selectedA);
+    const optB = state.compareOptions.find((o) => o.key === selectedB);
+    if (optA && optB) {
+      currentRange.from = optA.from;
+      currentRange.to = optA.to;
+      return { from: optB.from, to: optB.to };
+    }
+  }
+  const fromDate = isoToDate(currentRange.from);
+  const toDate = isoToDate(currentRange.to);
+  if (!fromDate || !toDate) return null;
+
+  if (mode === "wow") {
+    return {
+      from: dateToIso(addDays(fromDate, -7)),
+      to: dateToIso(addDays(toDate, -7))
+    };
+  }
+  if (mode === "mom") {
+    return {
+      from: dateToIso(addMonths(fromDate, -1)),
+      to: dateToIso(addMonths(toDate, -1))
+    };
+  }
+  return {
+    from: dateToIso(addYears(fromDate, -1)),
+    to: dateToIso(addYears(toDate, -1))
+  };
+}
+
+function sumByRange(rows, from, to) {
+  return rows
+    .filter((r) => r.date !== "Без даты" && r.date >= from && r.date <= to)
+    .reduce((sum, r) => sum + r.revenue, 0);
+}
+
+function isoToDate(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ""))) return null;
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function dateToIso(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDays(d, days) {
+  const out = new Date(d);
+  out.setDate(out.getDate() + days);
+  return out;
+}
+
+function addMonths(d, months) {
+  const out = new Date(d);
+  out.setMonth(out.getMonth() + months);
+  return out;
+}
+
+function addYears(d, years) {
+  const out = new Date(d);
+  out.setFullYear(out.getFullYear() + years);
+  return out;
+}
+
+function updateComparePeriodSelectors(rows) {
+  const mode = els.compareMode.value || "wow";
+  state.compareOptions = buildCompareOptions(rows, mode);
+  fillCompareSelect(els.comparePeriodA, state.compareOptions);
+  fillCompareSelect(els.comparePeriodB, state.compareOptions);
+  if (state.compareOptions.length >= 2) {
+    els.comparePeriodA.value = state.compareOptions[0].key;
+    els.comparePeriodB.value = state.compareOptions[1].key;
+  } else if (state.compareOptions.length === 1) {
+    els.comparePeriodA.value = state.compareOptions[0].key;
+    els.comparePeriodB.value = state.compareOptions[0].key;
+  }
+}
+
+function fillCompareSelect(selectEl, options) {
+  selectEl.innerHTML = "";
+  options.forEach((opt) => {
+    const o = document.createElement("option");
+    o.value = opt.key;
+    o.textContent = opt.label;
+    selectEl.appendChild(o);
+  });
+}
+
+function buildCompareOptions(rows, mode) {
+  const dates = [...new Set(rows.map((r) => r.date).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort(
+    (a, b) => b.localeCompare(a)
+  );
+  if (!dates.length) return [];
+  const map = new Map();
+  dates.forEach((iso) => {
+    const d = isoToDate(iso);
+    if (!d) return;
+    if (mode === "mom") {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const to = dateToIso(last);
+      map.set(key, { key, label: `${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`, from, to });
+      return;
+    }
+    if (mode === "yoy") {
+      const y = d.getFullYear();
+      const key = String(y);
+      map.set(key, { key, label: String(y), from: `${y}-01-01`, to: `${y}-12-31` });
+      return;
+    }
+    const start = getWeekStart(d);
+    const end = addDays(start, 6);
+    const key = `${dateToIso(start)}`;
+    map.set(key, { key, label: `${formatDate(dateToIso(start))} - ${formatDate(dateToIso(end))}`, from: dateToIso(start), to: dateToIso(end) });
+  });
+  return Array.from(map.values()).sort((a, b) => b.key.localeCompare(a.key));
+}
+
+function getWeekStart(d) {
+  const out = new Date(d);
+  const day = (out.getDay() + 6) % 7;
+  out.setDate(out.getDate() - day);
+  return out;
 }
 
 function matchesWarehouseType(row, selectedTypes, groupWarehouseCount) {
@@ -847,10 +1139,18 @@ function groupRowsForTable(rows) {
       ...g,
       items: g.items.sort((a, b) => a.warehouse.localeCompare(b.warehouse, "ru"))
     }))
-    .sort((a, b) => {
-      if (a.date === b.date) return a.group.localeCompare(b.group, "ru");
-      return a.date.localeCompare(b.date);
-    });
+    .sort(sortGroupRows);
+}
+
+function sortGroupRows(a, b) {
+  if (a.date !== b.date) return a.date.localeCompare(b.date);
+  if (state.detailSort === "name_asc") return a.group.localeCompare(b.group, "ru");
+  if (state.detailSort === "name_desc") return b.group.localeCompare(a.group, "ru");
+  return b.total - a.total;
+}
+
+function exportToPdf() {
+  window.print();
 }
 
 function splitRestaurantName(name) {

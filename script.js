@@ -26,6 +26,7 @@ const els = {
   compareStats: document.getElementById("compareStats"),
   viewWarehouses: document.getElementById("viewWarehouses"),
   detailSort: document.getElementById("detailSort"),
+  detailGroupBy: document.getElementById("detailGroupBy"),
   exportExcel: document.getElementById("exportExcel"),
   exportPdf: document.getElementById("exportPdf"),
   downloadLog: document.getElementById("downloadLog"),
@@ -60,6 +61,10 @@ els.viewWarehouses.addEventListener("change", () => {
 });
 els.detailSort.addEventListener("change", () => {
   state.detailSort = els.detailSort.value || "revenue_desc";
+  renderTable(state.filteredRows);
+});
+els.detailGroupBy.addEventListener("change", () => {
+  state.expandedGroups.clear();
   renderTable(state.filteredRows);
 });
 els.exportExcel.addEventListener("click", exportToExcelPivot);
@@ -1061,7 +1066,7 @@ function renderTable(rows) {
     const isOpen = state.showWarehouses && state.expandedGroups.has(group.key);
     html.push(`
       <tr class="group-row">
-        <td>${formatDate(group.date)}</td>
+        <td>${escapeHtml(group.periodLabel)}</td>
         <td>
           ${
             state.showWarehouses
@@ -1077,7 +1082,7 @@ function renderTable(rows) {
       group.items.forEach((item) => {
         html.push(`
           <tr>
-            <td>${formatDate(item.date)}</td>
+            <td>${escapeHtml(group.periodLabel)}</td>
             <td class="warehouse-name">${escapeHtml(item.warehouse)}</td>
             <td class="money">${formatMoney(item.revenue)}</td>
           </tr>
@@ -1127,19 +1132,25 @@ function onTableClick(event) {
 }
 
 function groupRowsForTable(rows) {
+  const groupBy = els.detailGroupBy.value || "day";
   const map = new Map();
   rows.forEach((row) => {
-    const key = `${row.date}__${row.group}`;
-    const bucket = map.get(key) || { key, date: row.date, group: row.group, total: 0, items: [] };
+    const period = getPeriodInfo(row.date, groupBy);
+    const key = `${period.key}__${row.group}`;
+    const bucket =
+      map.get(key) ||
+      { key, date: period.sortDate, periodLabel: period.label, periodKey: period.key, group: row.group, total: 0, warehouseMap: new Map() };
     bucket.total += row.revenue;
-    bucket.items.push(row);
+    bucket.warehouseMap.set(row.warehouse, (bucket.warehouseMap.get(row.warehouse) || 0) + row.revenue);
     map.set(key, bucket);
   });
 
   return Array.from(map.values())
     .map((g) => ({
       ...g,
-      items: g.items.sort((a, b) => a.warehouse.localeCompare(b.warehouse, "ru"))
+      items: Array.from(g.warehouseMap.entries())
+        .map(([warehouse, revenue]) => ({ warehouse, revenue }))
+        .sort((a, b) => a.warehouse.localeCompare(b.warehouse, "ru"))
     }))
     .sort(sortGroupRows);
 }
@@ -1149,6 +1160,41 @@ function sortGroupRows(a, b) {
   if (state.detailSort === "name_asc") return a.group.localeCompare(b.group, "ru");
   if (state.detailSort === "name_desc") return b.group.localeCompare(a.group, "ru");
   return b.total - a.total;
+}
+
+function getPeriodInfo(isoDate, mode) {
+  if (!isoDate || isoDate === "Без даты") {
+    return { key: "Без даты", label: "Без даты", sortDate: "9999-12-31" };
+  }
+  const d = isoToDate(isoDate);
+  if (!d) return { key: isoDate, label: isoDate, sortDate: isoDate };
+
+  if (mode === "month") {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return {
+      key: `${y}-${m}`,
+      label: `${m}.${y}`,
+      sortDate: `${y}-${m}-01`
+    };
+  }
+
+  if (mode === "week") {
+    const ws = getWeekStart(d);
+    const we = addDays(ws, 6);
+    const wKey = dateToIso(ws);
+    return {
+      key: `week-${wKey}`,
+      label: `${formatDate(dateToIso(ws))} - ${formatDate(dateToIso(we))}`,
+      sortDate: wKey
+    };
+  }
+
+  return {
+    key: isoDate,
+    label: formatDate(isoDate),
+    sortDate: isoDate
+  };
 }
 
 function exportToPdf() {

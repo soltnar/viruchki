@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Выручка ресторанов</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=20260308-22" />
+  </head>
+  <body>
+    <div class="bg-shape bg-shape-1"></div>
+    <div class="bg-shape bg-shape-2"></div>
+
+    <main class="container">
+      <header class="hero">
+        <h1>Мониторинг выручки ресторанов</h1>
+        <p>
+          Загрузите один или несколько Excel-файлов. Сайт соберет данные по датам и ресторанам,
+          покажет динамику и итоговую таблицу.
+        </p>
+        <p class="hint">Версия: <span id="appVersion">2026-03-08.22</span></p>
+      </header>
+
+      <section class="panel upload-panel">
+        <label class="upload-label" for="files">Excel-файлы (.xlsx)</label>
+        <input id="files" type="file" accept=".xlsx" multiple />
+        <p class="hint">Поддерживаются отчеты с колонками типа «Сумма», «Продажа», «Выручка».</p>
+        <p class="hint" id="debugInfo"></p>
+        <p class="hint" id="parseNotice"></p>
+      </section>
+
+      <section class="panel filters">
+        <div class="filter-group">
+          <label for="restaurantFilter">Рестораны (мультивыбор)</label>
+          <select id="restaurantFilter" multiple size="6"></select>
+          <p class="hint">Ctrl/Cmd + клик для выбора нескольких.</p>
+        </div>
+        <div class="filter-group">
+          <label for="dateFrom">С даты</label>
+          <input id="dateFrom" type="date" />
+        </div>
+        <div class="filter-group">
+          <label for="dateTo">По дату</label>
+          <input id="dateTo" type="date" />
+        </div>
+        <div class="filter-group">
+          <label for="warehouseType">Тип склада</label>
+          <select id="warehouseType" multiple size="4">
+            <option value="all">Все</option>
+            <option value="kitchen">Только Кухня</option>
+            <option value="bar">Только Бар</option>
+            <option value="single">Только рестораны с одним складом</option>
+          </select>
+          <p class="hint">Ctrl/Cmd + клик для выбора нескольких.</p>
+        </div>
+      </section>
+
+      <section class="panel stats" id="stats"></section>
+
+      <section class="panel">
+        <h2>График по дням</h2>
+        <canvas id="chart" height="90"></canvas>
+      </section>
+
+      <section class="panel">
+        <h2>Таблица выручки</h2>
+        <div class="table-controls">
+          <label class="table-toggle">
+            <input id="viewWarehouses" type="checkbox" checked />
+            Показывать склады внутри ресторана
+          </label>
+        </div>
+        <h2>Итоги по датам</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Общая выручка</th>
+              </tr>
+            </thead>
+            <tbody id="dateTotalsBody"></tbody>
+          </table>
+        </div>
+        <h2>Детализация по ресторанам</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Ресторан / склад</th>
+                <th>Выручка</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="./script.js?v=20260308-22"></script>
+  </body>
+</html>

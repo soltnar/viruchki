@@ -138,7 +138,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-09.38" });
+  appendDebugLog("info", "app_start", { version: "2026-03-09.40" });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -1364,10 +1364,10 @@ function renderChart(rows) {
   const dates = Array.from(byDate.keys()).sort((a, b) => a.localeCompare(b));
   const values = dates.map((d) => byDate.get(d));
 
-  drawSimpleLineChart(ctx, dates, values);
+  drawRevenueChart(ctx, dates, values);
 }
 
-function drawSimpleLineChart(ctx, labels, values) {
+function drawRevenueChart(ctx, labels, values) {
   const canvas = els.chart;
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -1389,56 +1389,163 @@ function drawSimpleLineChart(ctx, labels, values) {
     return;
   }
 
-  const padding = { top: 16, right: 16, bottom: 24, left: 56 };
+  const padding = { top: 54, right: 16, bottom: 30, left: 74 };
   const plotW = width - padding.left - padding.right;
   const plotH = height - padding.top - padding.bottom;
-  const min = Math.min(...values);
   const max = Math.max(...values);
-  const range = max - min || 1;
+  const yMax = max > 0 ? max * 1.08 : 1;
+  const yMin = 0;
+  const yRange = yMax - yMin;
+  const stepX = labels.length === 1 ? 0 : plotW / (labels.length - 1);
+  const avg7 = getMovingAverage(values, 7);
 
-  ctx.strokeStyle = "#d8dfd4";
+  const total = values.reduce((s, v) => s + v, 0);
+  const avg = total / values.length;
+  const maxValue = Math.max(...values);
+  const minValue = Math.min(...values);
+  const maxIndex = values.findIndex((v) => v === maxValue);
+  const minIndex = values.findIndex((v) => v === minValue);
+
+  // Grid and Y labels
+  const gridLines = 5;
+  ctx.strokeStyle = "#e7ece6";
   ctx.lineWidth = 1;
+  ctx.fillStyle = "#6a756d";
+  ctx.font = "11px Manrope";
+  for (let i = 0; i <= gridLines; i += 1) {
+    const ratio = i / gridLines;
+    const y = padding.top + ratio * plotH;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(width - padding.right, y);
+    ctx.stroke();
+    const val = yMax - ratio * yRange;
+    const txt = formatMoneyCompact(val);
+    const tw = ctx.measureText(txt).width;
+    ctx.fillText(txt, padding.left - tw - 8, y + 4);
+  }
+
+  // Axes
+  ctx.strokeStyle = "#cfd8cf";
   ctx.beginPath();
   ctx.moveTo(padding.left, padding.top);
   ctx.lineTo(padding.left, height - padding.bottom);
   ctx.lineTo(width - padding.right, height - padding.bottom);
   ctx.stroke();
 
-  ctx.strokeStyle = "#0f766e";
+  // Bars
+  const barW = Math.max(3, Math.min(16, stepX * 0.6 || plotW * 0.5));
+  ctx.fillStyle = "rgba(15, 118, 110, 0.32)";
+  values.forEach((v, i) => {
+    const xCenter = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
+    const y = padding.top + (1 - (v - yMin) / yRange) * plotH;
+    const h = height - padding.bottom - y;
+    ctx.fillRect(xCenter - barW / 2, y, barW, h);
+  });
+
+  // 7-day average line
+  ctx.strokeStyle = "#b45309";
   ctx.lineWidth = 2;
   ctx.beginPath();
-
-  values.forEach((v, i) => {
-    const x = padding.left + (labels.length === 1 ? plotW / 2 : (i / (labels.length - 1)) * plotW);
-    const y = padding.top + (1 - (v - min) / range) * plotH;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+  let startedAvgLine = false;
+  avg7.forEach((v, i) => {
+    if (v == null) return;
+    const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
+    const y = padding.top + (1 - (v - yMin) / yRange) * plotH;
+    if (startedAvgLine) ctx.lineTo(x, y);
+    else {
+      ctx.moveTo(x, y);
+      startedAvgLine = true;
+    }
   });
-
   ctx.stroke();
 
-  ctx.fillStyle = "#0f766e";
-  values.forEach((v, i) => {
-    const x = padding.left + (labels.length === 1 ? plotW / 2 : (i / (labels.length - 1)) * plotW);
-    const y = padding.top + (1 - (v - min) / range) * plotH;
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
-    ctx.fill();
-  });
+  // Min/Max markers
+  drawDot(ctx, labels.length === 1 ? padding.left + plotW / 2 : padding.left + maxIndex * stepX, padding.top + (1 - (maxValue - yMin) / yRange) * plotH, "#0f766e");
+  drawDot(ctx, labels.length === 1 ? padding.left + plotW / 2 : padding.left + minIndex * stepX, padding.top + (1 - (minValue - yMin) / yRange) * plotH, "#5d6a61");
 
   ctx.fillStyle = "#1d2a21";
   ctx.font = "11px Manrope";
-  const firstDate = formatDate(labels[0]);
-  const lastDate = formatDate(labels[labels.length - 1]);
-  ctx.fillText(firstDate, padding.left, height - 6);
-  if (labels.length > 1) {
-    const textW = ctx.measureText(lastDate).width;
-    ctx.fillText(lastDate, width - padding.right - textW, height - 6);
-  }
+  const maxLabel = `MAX: ${formatMoneyCompact(maxValue)} (${formatDate(labels[maxIndex])})`;
+  const minLabel = `MIN: ${formatMoneyCompact(minValue)} (${formatDate(labels[minIndex])})`;
+  ctx.fillText(maxLabel, padding.left, 14);
+  ctx.fillText(minLabel, padding.left, 30);
+  ctx.fillText(`СРЕДНЕЕ: ${formatMoneyCompact(avg)} | ИТОГО: ${formatMoneyCompact(total)}`, padding.left, 46);
 
-  ctx.fillStyle = "#5d6a61";
-  ctx.fillText(formatMoney(max), 8, padding.top + 8);
-  ctx.fillText(formatMoney(min), 8, height - padding.bottom);
+  // X labels
+  const ticks = getTickIndexes(labels.length, 6);
+  ctx.fillStyle = "#1d2a21";
+  ctx.font = "11px Manrope";
+  ticks.forEach((idx) => {
+    const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + idx * stepX;
+    const txt = formatDate(labels[idx]);
+    const tw = ctx.measureText(txt).width;
+    ctx.fillText(txt, x - tw / 2, height - 8);
+  });
+
+  // Legend
+  drawLegend(ctx, width - padding.right - 182, 10, [
+    { color: "rgba(15, 118, 110, 0.32)", text: "Выручка за день", box: true },
+    { color: "#b45309", text: "Скользящее среднее (7д)", box: false }
+  ]);
+}
+
+function getMovingAverage(values, windowSize) {
+  if (!Array.isArray(values) || !values.length) return [];
+  const out = new Array(values.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < values.length; i += 1) {
+    sum += values[i];
+    if (i >= windowSize) sum -= values[i - windowSize];
+    if (i >= windowSize - 1) out[i] = sum / windowSize;
+  }
+  return out;
+}
+
+function getTickIndexes(length, maxTicks) {
+  if (length <= 1) return [0];
+  const ticks = [0];
+  const step = Math.ceil((length - 1) / Math.max(1, maxTicks - 1));
+  for (let i = step; i < length - 1; i += step) ticks.push(i);
+  if (ticks[ticks.length - 1] !== length - 1) ticks.push(length - 1);
+  return ticks;
+}
+
+function drawDot(ctx, x, y, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawLegend(ctx, x, y, items) {
+  let curY = y;
+  ctx.font = "11px Manrope";
+  items.forEach((item) => {
+    if (item.box) {
+      ctx.fillStyle = item.color;
+      ctx.fillRect(x, curY + 2, 14, 8);
+      ctx.strokeStyle = "#95a39a";
+      ctx.strokeRect(x, curY + 2, 14, 8);
+    } else {
+      ctx.strokeStyle = item.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, curY + 6);
+      ctx.lineTo(x + 14, curY + 6);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#1d2a21";
+    ctx.fillText(item.text, x + 20, curY + 10);
+    curY += 16;
+  });
+}
+
+function formatMoneyCompact(value) {
+  const abs = Math.abs(value || 0);
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} млн ₽`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1)} тыс ₽`;
+  return formatMoney(value);
 }
 
 function formatMoney(value) {

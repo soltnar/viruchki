@@ -198,13 +198,21 @@ h2 {
 
 #exportPdf,
 #downloadLog,
-#exportExcel {
+#exportExcel,
+#expandAllRows,
+#collapseAllRows {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
   padding: 8px 12px;
   font: inherit;
   cursor: pointer;
+}
+
+#expandAllRows:disabled,
+#collapseAllRows:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 #chart {
@@ -343,9 +351,11 @@ th {
   .bg-shape,
   .upload-panel,
   .filters,
-  #exportPdf,
-  .table-controls .hint,
-  #chart {
+  #compareSection,
+  #chartSection,
+  .table-controls,
+  #downloadLog,
+  .table-controls .hint {
     display: none !important;
   }
 
@@ -356,7 +366,7 @@ th {
 
   html,
   body {
-    font-size: 11px;
+    font-size: 10px;
   }
 
   body {
@@ -366,6 +376,7 @@ th {
   .container {
     width: 100%;
     margin: 0;
+    gap: 8px;
   }
 
   .panel,
@@ -376,33 +387,58 @@ th {
     animation: none;
   }
 
+  .hero .hint {
+    display: none;
+  }
+
   .table-wrap {
     max-height: none;
     overflow: visible;
-    border: none;
+    border: 1px solid #dfe5dd;
+    border-radius: 8px;
     page-break-inside: auto;
   }
 
   h1 {
-    font-size: 20px;
-    margin-bottom: 4px;
+    font-size: 17px;
+    margin-bottom: 2px;
   }
 
   h2 {
-    font-size: 16px;
-    margin: 8px 0 6px;
+    font-size: 13px;
+    margin: 6px 0 4px;
+  }
+
+  .stats {
+    gap: 6px;
+  }
+
+  .stat {
+    border-color: #dfe5dd;
+    border-radius: 8px;
+    padding: 8px;
+  }
+
+  .stat-title {
+    font-size: 9px;
+  }
+
+  .stat-value {
+    font-size: 13px;
   }
 
   th,
   td {
-    font-size: 10.5px;
-    padding: 4px 6px;
+    font-size: 9px;
+    padding: 3px 5px;
     line-height: 1.25;
     white-space: normal;
   }
 
   th {
     position: static !important;
+    background: #f2f6f1;
+    font-size: 9px;
   }
 
   thead {
@@ -415,6 +451,13 @@ th {
   }
 
   .group-row td {
-    background: #fff;
+    background: #f7faf6;
+  }
+
+  .group-toggle {
+    color: #1f2d25;
+    text-decoration: none;
+    cursor: default;
+    pointer-events: none;
   }
 }

@@ -27,6 +27,8 @@ const els = {
   viewWarehouses: document.getElementById("viewWarehouses"),
   detailSort: document.getElementById("detailSort"),
   detailGroupBy: document.getElementById("detailGroupBy"),
+  expandAllRows: document.getElementById("expandAllRows"),
+  collapseAllRows: document.getElementById("collapseAllRows"),
   exportExcel: document.getElementById("exportExcel"),
   exportPdf: document.getElementById("exportPdf"),
   downloadLog: document.getElementById("downloadLog"),
@@ -57,6 +59,7 @@ els.comparePrevTo.addEventListener("change", applyFilters);
 els.tableBody.addEventListener("click", onTableClick);
 els.viewWarehouses.addEventListener("change", () => {
   state.showWarehouses = Boolean(els.viewWarehouses.checked);
+  updateWarehouseActionButtons();
   renderTable(state.filteredRows);
 });
 els.detailSort.addEventListener("change", () => {
@@ -68,10 +71,13 @@ els.detailGroupBy.addEventListener("change", () => {
   renderTable(state.filteredRows);
   renderDateTotals(state.filteredRows);
 });
+els.expandAllRows.addEventListener("click", expandAllGroups);
+els.collapseAllRows.addEventListener("click", collapseAllGroups);
 els.exportExcel.addEventListener("click", exportToExcelPivot);
 els.exportPdf.addEventListener("click", exportToPdf);
 els.downloadLog.addEventListener("click", downloadDebugLog);
 toggleCompareCustom();
+updateWarehouseActionButtons();
 
 function handleFiles(event) {
   const files = Array.from(event.target.files || []);
@@ -132,7 +138,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-08.28" });
+  appendDebugLog("info", "app_start", { version: "2026-03-09.38" });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -1134,6 +1140,23 @@ function onTableClick(event) {
   if (state.expandedGroups.has(key)) state.expandedGroups.delete(key);
   else state.expandedGroups.add(key);
   renderTable(state.filteredRows);
+}
+
+function expandAllGroups() {
+  if (!state.showWarehouses) return;
+  groupRowsForTable(state.filteredRows).forEach((g) => state.expandedGroups.add(g.key));
+  renderTable(state.filteredRows);
+}
+
+function collapseAllGroups() {
+  state.expandedGroups.clear();
+  renderTable(state.filteredRows);
+}
+
+function updateWarehouseActionButtons() {
+  const disabled = !state.showWarehouses;
+  if (els.expandAllRows) els.expandAllRows.disabled = disabled;
+  if (els.collapseAllRows) els.collapseAllRows.disabled = disabled;
 }
 
 function groupRowsForTable(rows) {

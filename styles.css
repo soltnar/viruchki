@@ -80,6 +80,10 @@ body {
   animation: rise 0.55s ease;
 }
 
+.section-title {
+  margin-top: 0;
+}
+
 .upload-panel input {
   width: 100%;
 }
@@ -162,10 +166,24 @@ h2 {
 
 .table-controls {
   margin-bottom: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.controls-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+}
+
+.controls-row-grow .table-toggle {
+  flex: 1 1 260px;
+}
+
+.controls-row-grow #exportExcel,
+.controls-row-grow #exportPdf {
+  margin-left: auto;
 }
 
 .table-toggle {
@@ -310,6 +328,11 @@ th {
     padding: 12px;
   }
 
+  .controls-row-grow #exportExcel,
+  .controls-row-grow #exportPdf {
+    margin-left: 0;
+  }
+
   h2 {
     font-size: 1rem;
     margin: 2px 0 10px;
@@ -351,7 +374,6 @@ th {
   .bg-shape,
   .upload-panel,
   .filters,
-  #compareSection,
   #chartSection,
   .table-controls,
   #downloadLog,
@@ -389,6 +411,14 @@ th {
 
   .hero .hint {
     display: none;
+  }
+
+  #compareSection {
+    margin-bottom: 6px;
+  }
+
+  #compareSection .filters {
+    display: none !important;
   }
 
   .table-wrap {

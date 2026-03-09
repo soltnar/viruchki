@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260309-38" />
+    <link rel="stylesheet" href="./styles.css?v=20260309-39" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
@@ -20,7 +20,7 @@
           Загрузите один или несколько Excel-файлов. Сайт соберет данные по датам и ресторанам,
           покажет динамику и итоговую таблицу.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-03-09.38</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-03-09.39</span></p>
       </header>
 
       <section class="panel upload-panel">
@@ -33,6 +33,7 @@
       </section>
 
       <section class="panel filters">
+        <h2 class="section-title">Фильтры</h2>
         <div class="filter-group">
           <label for="restaurantFilter">Рестораны (мультивыбор)</label>
           <select id="restaurantFilter" multiple size="6"></select>
@@ -97,33 +98,37 @@
         <canvas id="chart" height="90"></canvas>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="revenueSection">
         <h2>Таблица выручки</h2>
         <div class="table-controls">
-          <label class="table-toggle">
-            <input id="viewWarehouses" type="checkbox" checked />
-            Показывать склады внутри ресторана
-          </label>
-          <button id="expandAllRows" type="button">Развернуть все склады</button>
-          <button id="collapseAllRows" type="button">Свернуть все склады</button>
-          <label class="table-toggle" for="detailSort">
-            Сортировка детализации
-            <select id="detailSort">
-              <option value="revenue_desc">По выручке (больше -> меньше)</option>
-              <option value="name_asc">По имени (А -> Я)</option>
-              <option value="name_desc">По имени (Я -> А)</option>
-            </select>
-          </label>
-          <label class="table-toggle" for="detailGroupBy">
-            Группировка
-            <select id="detailGroupBy">
-              <option value="day">По дням</option>
-              <option value="week">По неделям</option>
-              <option value="month">По месяцам</option>
-            </select>
-          </label>
-          <button id="exportExcel" type="button">Экспорт в Excel</button>
-          <button id="exportPdf" type="button">Экспорт в PDF</button>
+          <div class="controls-row">
+            <label class="table-toggle">
+              <input id="viewWarehouses" type="checkbox" checked />
+              Показывать склады внутри ресторана
+            </label>
+            <button id="expandAllRows" type="button">Развернуть все склады</button>
+            <button id="collapseAllRows" type="button">Свернуть все склады</button>
+          </div>
+          <div class="controls-row controls-row-grow">
+            <label class="table-toggle" for="detailSort">
+              Сортировка детализации
+              <select id="detailSort">
+                <option value="revenue_desc">По выручке (больше -> меньше)</option>
+                <option value="name_asc">По имени (А -> Я)</option>
+                <option value="name_desc">По имени (Я -> А)</option>
+              </select>
+            </label>
+            <label class="table-toggle" for="detailGroupBy">
+              Группировка
+              <select id="detailGroupBy">
+                <option value="day">По дням</option>
+                <option value="week">По неделям</option>
+                <option value="month">По месяцам</option>
+              </select>
+            </label>
+            <button id="exportExcel" type="button">Экспорт в Excel</button>
+            <button id="exportPdf" type="button">Экспорт в PDF</button>
+          </div>
         </div>
         <h2>Итоги по датам</h2>
         <div class="table-wrap">
@@ -154,6 +159,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./script.js?v=20260309-38"></script>
+    <script src="./script.js?v=20260309-39"></script>
   </body>
 </html>

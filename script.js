@@ -1096,24 +1096,28 @@ function renderTable(rows) {
 
 function renderDateTotals(rows) {
   if (!els.dateTotalsBody) return;
-  const byDate = new Map();
+  const groupBy = els.detailGroupBy.value || "day";
+  const byPeriod = new Map();
   rows.forEach((row) => {
     if (row.date === "Без даты") return;
-    byDate.set(row.date, (byDate.get(row.date) || 0) + row.revenue);
+    const period = getPeriodInfo(row.date, groupBy);
+    const bucket = byPeriod.get(period.key) || { label: period.label, sortDate: period.sortDate, total: 0 };
+    bucket.total += row.revenue;
+    byPeriod.set(period.key, bucket);
   });
 
-  const dates = Array.from(byDate.keys()).sort((a, b) => a.localeCompare(b));
-  if (!dates.length) {
+  const periods = Array.from(byPeriod.values()).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+  if (!periods.length) {
     els.dateTotalsBody.innerHTML = '<tr><td class="empty" colspan="2">Нет данных по датам</td></tr>';
     return;
   }
 
-  els.dateTotalsBody.innerHTML = dates
+  els.dateTotalsBody.innerHTML = periods
     .map(
-      (date) => `
+      (period) => `
       <tr>
-        <td>${formatDate(date)}</td>
-        <td class="money">${formatMoney(byDate.get(date))}</td>
+        <td>${escapeHtml(period.label)}</td>
+        <td class="money">${formatMoney(period.total)}</td>
       </tr>
     `
     )

@@ -66,6 +66,7 @@ els.detailSort.addEventListener("change", () => {
 els.detailGroupBy.addEventListener("change", () => {
   state.expandedGroups.clear();
   renderTable(state.filteredRows);
+  renderDateTotals(state.filteredRows);
 });
 els.exportExcel.addEventListener("click", exportToExcelPivot);
 els.exportPdf.addEventListener("click", exportToPdf);

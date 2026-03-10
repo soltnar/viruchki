@@ -64,7 +64,10 @@ els.comparePrevFrom.addEventListener("change", applyFilters);
 els.comparePrevTo.addEventListener("change", applyFilters);
 els.chartGroupBy.addEventListener("change", applyFilters);
 els.chartCompareView.addEventListener("change", applyFilters);
-els.enableComparison.addEventListener("change", applyFilters);
+els.enableComparison.addEventListener("change", () => {
+  updateComparisonUI();
+  applyFilters();
+});
 els.tableBody.addEventListener("click", onTableClick);
 els.viewWarehouses.addEventListener("change", () => {
   state.showWarehouses = Boolean(els.viewWarehouses.checked);
@@ -92,6 +95,7 @@ els.chart.addEventListener("touchstart", onChartPointerMove, { passive: true });
 els.chart.addEventListener("touchmove", onChartPointerMove, { passive: true });
 els.chart.addEventListener("touchend", hideChartTooltip);
 toggleCompareCustom();
+updateComparisonUI();
 updateWarehouseActionButtons();
 
 function handleFiles(event) {
@@ -153,7 +157,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-10.45" });
+  appendDebugLog("info", "app_start", { version: "2026-03-10.46" });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -177,7 +181,7 @@ function downloadDebugLog() {
     list = [];
   }
   const payload = {
-    appVersion: "2026-03-08.28",
+    appVersion: "2026-03-10.46",
     exportedAt: new Date().toISOString(),
     logs: list
   };
@@ -826,11 +830,26 @@ function applyFilters() {
 }
 
 function toggleCompareCustom() {
+  if (!isComparisonEnabled()) {
+    const customGroups = document.querySelectorAll(".compare-custom");
+    customGroups.forEach((el) => el.classList.remove("visible"));
+    const presetGroups = document.querySelectorAll(".compare-preset");
+    presetGroups.forEach((el) => el.classList.remove("visible"));
+    return;
+  }
   const isCustom = (els.compareMode.value || "wow") === "custom";
   const customGroups = document.querySelectorAll(".compare-custom");
   customGroups.forEach((el) => el.classList.toggle("visible", isCustom));
   const presetGroups = document.querySelectorAll(".compare-preset");
   presetGroups.forEach((el) => el.classList.toggle("visible", !isCustom));
+}
+
+function updateComparisonUI() {
+  const enabled = isComparisonEnabled();
+  const comparisonOnlyBlocks = document.querySelectorAll(".comparison-only");
+  comparisonOnlyBlocks.forEach((el) => el.classList.toggle("hidden-soft", !enabled));
+  if (els.chartCompareView) els.chartCompareView.disabled = !enabled;
+  toggleCompareCustom();
 }
 
 function renderComparison(rows, from, to) {
@@ -845,14 +864,6 @@ function renderComparison(rows, from, to) {
       <article class="stat">
         <p class="stat-title">Текущий период (${formatDate(currentRange.from)} - ${formatDate(currentRange.to)})</p>
         <p class="stat-value">${formatMoney(currentTotalOnly)}</p>
-      </article>
-      <article class="stat">
-        <p class="stat-title">Сравнение</p>
-        <p class="stat-value">Отключено</p>
-      </article>
-      <article class="stat">
-        <p class="stat-title">Подсказка</p>
-        <p class="stat-value">Включите «Включить сравнение» для сопоставления периодов</p>
       </article>
     `;
     return;

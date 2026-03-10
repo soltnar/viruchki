@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260310-45" />
+    <link rel="stylesheet" href="./styles.css?v=20260310-46" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
@@ -20,7 +20,7 @@
           Загрузите один или несколько Excel-файлов. Сайт соберет данные по датам и ресторанам,
           покажет динамику и итоговую таблицу.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-03-10.45</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-03-10.46</span></p>
       </header>
 
       <section class="panel upload-panel">
@@ -54,7 +54,13 @@
       <section class="panel stats" id="stats"></section>
 
       <section class="panel" id="compareSection">
-        <h2>Сравнение периодов</h2>
+        <div class="compare-header">
+          <h2>Сравнение периодов</h2>
+          <label class="table-toggle">
+            <input id="enableComparison" type="checkbox" checked />
+            Включить сравнение
+          </label>
+        </div>
         <div class="filters">
           <div class="filter-group">
             <label for="dateFrom">Текущий период: с даты</label>
@@ -64,7 +70,7 @@
             <label for="dateTo">Текущий период: по дату</label>
             <input id="dateTo" type="date" />
           </div>
-          <div class="filter-group">
+          <div class="filter-group comparison-only">
             <label for="compareMode">Режим сравнения</label>
             <select id="compareMode">
               <option value="wow">Неделя к неделе</option>
@@ -73,19 +79,19 @@
               <option value="custom">Пользовательский</option>
             </select>
           </div>
-          <div class="filter-group compare-preset" id="comparePeriodAGroup">
+          <div class="filter-group compare-preset comparison-only" id="comparePeriodAGroup">
             <label for="comparePeriodA">Период A</label>
             <select id="comparePeriodA"></select>
           </div>
-          <div class="filter-group compare-preset" id="comparePeriodBGroup">
+          <div class="filter-group compare-preset comparison-only" id="comparePeriodBGroup">
             <label for="comparePeriodB">Период B</label>
             <select id="comparePeriodB"></select>
           </div>
-          <div class="filter-group compare-custom" id="compareCustomGroup">
+          <div class="filter-group compare-custom comparison-only" id="compareCustomGroup">
             <label for="comparePrevFrom">Предыдущий период: с даты</label>
             <input id="comparePrevFrom" type="date" />
           </div>
-          <div class="filter-group compare-custom">
+          <div class="filter-group compare-custom comparison-only">
             <label for="comparePrevTo">Предыдущий период: по дату</label>
             <input id="comparePrevTo" type="date" />
           </div>
@@ -104,17 +110,13 @@
               <option value="month">По месяцам</option>
             </select>
           </label>
-          <label class="table-toggle" for="chartCompareView">
+          <label class="table-toggle comparison-only" id="chartCompareViewControl" for="chartCompareView">
             Вид сравнения
             <select id="chartCompareView">
               <option value="overlay">Наложение</option>
               <option value="side_by_side">Рядом (2 столбца)</option>
               <option value="index_100">100% индекс</option>
             </select>
-          </label>
-          <label class="table-toggle">
-            <input id="enableComparison" type="checkbox" checked />
-            Включить сравнение
           </label>
           <button id="exportChartPng" type="button">Скачать график PNG</button>
         </div>
@@ -185,6 +187,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./script.js?v=20260310-45"></script>
+    <script src="./script.js?v=20260310-46"></script>
   </body>
 </html>

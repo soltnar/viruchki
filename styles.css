@@ -210,6 +210,23 @@ h2 {
   display: grid;
 }
 
+.compare-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.compare-header h2 {
+  margin: 0;
+}
+
+.hidden-soft {
+  display: none !important;
+}
+
 .table-controls select {
   min-width: 220px;
 }
@@ -397,6 +414,14 @@ th {
     align-items: flex-start;
   }
 
+  .compare-header {
+    align-items: flex-start;
+  }
+
+  .compare-header .table-toggle {
+    width: 100%;
+  }
+
   .chart-controls .table-toggle {
     width: 100%;
   }
@@ -425,6 +450,7 @@ th {
   .bg-shape,
   .upload-panel,
   .filters,
+  #compareSection,
   #chartSection,
   .table-controls,
   #downloadLog,

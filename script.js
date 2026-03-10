@@ -39,8 +39,6 @@ const els = {
   compareMode: document.getElementById("compareMode"),
   comparePeriodA: document.getElementById("comparePeriodA"),
   comparePeriodB: document.getElementById("comparePeriodB"),
-  comparePeriodAGroup: document.getElementById("comparePeriodAGroup"),
-  comparePeriodBGroup: document.getElementById("comparePeriodBGroup"),
   comparePrevFrom: document.getElementById("comparePrevFrom"),
   comparePrevTo: document.getElementById("comparePrevTo"),
   compareCustomGroup: document.getElementById("compareCustomGroup"),
@@ -220,7 +218,7 @@ function downloadDebugLog() {
     list = [];
   }
   const payload = {
-    appVersion: "2026-03-10.52",
+    appVersion: "2026-03-10.53",
     exportedAt: new Date().toISOString(),
     logs: list
   };

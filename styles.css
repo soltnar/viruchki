@@ -270,6 +270,35 @@ h2 {
   display: grid;
 }
 
+.compare-period-switch {
+  grid-column: 1 / -1;
+}
+
+.period-switch-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.period-switch-side {
+  display: grid;
+  gap: 6px;
+}
+
+.period-switch-label {
+  font-size: 0.85rem;
+  color: var(--subtle);
+  font-weight: 600;
+}
+
+.period-switch-arrow {
+  color: #0f766e;
+  font-size: 1.2rem;
+  font-weight: 700;
+  padding-top: 18px;
+}
+
 .compare-header {
   display: flex;
   flex-wrap: wrap;
@@ -571,6 +600,17 @@ th {
 
   .compare-filters {
     padding: 10px;
+  }
+
+  .period-switch-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .period-switch-arrow {
+    padding-top: 0;
+    justify-self: center;
+    transform: rotate(90deg);
   }
 
   .chart-controls .table-toggle {

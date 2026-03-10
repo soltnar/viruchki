@@ -244,6 +244,19 @@ h2 {
   position: relative;
 }
 
+.chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.chart-controls h2 {
+  margin: 0;
+}
+
 .chart-tooltip {
   position: absolute;
   z-index: 5;
@@ -377,6 +390,14 @@ th {
 
   #chart {
     height: 220px;
+  }
+
+  .chart-controls {
+    align-items: flex-start;
+  }
+
+  .chart-controls .table-toggle {
+    width: 100%;
   }
 
   th,

@@ -25,6 +25,7 @@ const els = {
   comparePrevTo: document.getElementById("comparePrevTo"),
   compareCustomGroup: document.getElementById("compareCustomGroup"),
   compareStats: document.getElementById("compareStats"),
+  chartGroupBy: document.getElementById("chartGroupBy"),
   viewWarehouses: document.getElementById("viewWarehouses"),
   detailSort: document.getElementById("detailSort"),
   detailGroupBy: document.getElementById("detailGroupBy"),
@@ -58,6 +59,7 @@ els.comparePeriodA.addEventListener("change", applyFilters);
 els.comparePeriodB.addEventListener("change", applyFilters);
 els.comparePrevFrom.addEventListener("change", applyFilters);
 els.comparePrevTo.addEventListener("change", applyFilters);
+els.chartGroupBy.addEventListener("change", applyFilters);
 els.tableBody.addEventListener("click", onTableClick);
 els.viewWarehouses.addEventListener("change", () => {
   state.showWarehouses = Boolean(els.viewWarehouses.checked);
@@ -145,7 +147,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-10.41" });
+  appendDebugLog("info", "app_start", { version: "2026-03-10.42" });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -1361,34 +1363,21 @@ function renderChart(baseRows, from, to) {
   if (!chartCtx) chartCtx = ctx;
   hideChartTooltip();
 
+  const groupBy = els.chartGroupBy ? els.chartGroupBy.value || "day" : "day";
   const ranges = resolveChartRanges(baseRows, from, to);
   if (!ranges) {
     state.chartMeta = null;
     hideChartTooltip();
-    drawRevenueChart(ctx, [], [], [], null);
+    drawRevenueChart(ctx, [], [], null, groupBy);
     return;
   }
 
-  const currentDates = buildDateRange(ranges.current.from, ranges.current.to);
-  const previousFromDate = isoToDate(ranges.previous.from);
-  const previousToDate = isoToDate(ranges.previous.to);
-  const hasValidPreviousRange = Boolean(previousFromDate && previousToDate);
-  const currentByDate = aggregateByDate(baseRows, ranges.current.from, ranges.current.to);
-  const previousByDate = aggregateByDate(baseRows, ranges.previous.from, ranges.previous.to);
-
-  const currentValues = currentDates.map((d) => currentByDate.get(d) || 0);
-  const previousValues = currentDates.map((_, index) => {
-    if (!hasValidPreviousRange) return null;
-    const pd = addDays(previousFromDate, index);
-    const pIso = dateToIso(pd);
-    if (pd > previousToDate) return null;
-    return previousByDate.get(pIso) || 0;
-  });
-
-  state.chartMeta = drawRevenueChart(ctx, currentDates, currentValues, previousValues, ranges);
+  const currentSeries = aggregateRangeByPeriod(baseRows, ranges.current.from, ranges.current.to, groupBy);
+  const previousSeries = aggregateRangeByPeriod(baseRows, ranges.previous.from, ranges.previous.to, groupBy);
+  state.chartMeta = drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy);
 }
 
-function drawRevenueChart(ctx, labels, values, previousValues, ranges) {
+function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy) {
   const canvas = els.chart;
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -1402,6 +1391,12 @@ function drawRevenueChart(ctx, labels, values, previousValues, ranges) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   ctx.clearRect(0, 0, width, height);
+  const labels = currentSeries.map((p) => p.label);
+  const values = currentSeries.map((p) => p.total);
+  const previousValues = currentSeries.map((_, i) => (i < previousSeries.length ? previousSeries[i].total : null));
+  const averageWindow = groupBy === "day" ? 7 : groupBy === "week" ? 4 : 3;
+  const averageLabelSuffix = groupBy === "day" ? "дн" : groupBy === "week" ? "нед" : "мес";
+  const periodNoun = groupBy === "day" ? "день" : groupBy === "week" ? "неделю" : "месяц";
 
   if (!values.length) {
     state.chartMeta = null;
@@ -1420,7 +1415,7 @@ function drawRevenueChart(ctx, labels, values, previousValues, ranges) {
   const yMin = 0;
   const yRange = yMax - yMin;
   const stepX = labels.length === 1 ? 0 : plotW / (labels.length - 1);
-  const avg7 = getMovingAverage(values, 7);
+  const movingAverage = getMovingAverage(values, averageWindow);
 
   const total = values.reduce((s, v) => s + v, 0);
   const avg = total / values.length;
@@ -1471,7 +1466,7 @@ function drawRevenueChart(ctx, labels, values, previousValues, ranges) {
   ctx.lineWidth = 2;
   ctx.beginPath();
   let startedAvgLine = false;
-  avg7.forEach((v, i) => {
+  movingAverage.forEach((v, i) => {
     if (v == null) return;
     const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
     const y = padding.top + (1 - (v - yMin) / yRange) * plotH;
@@ -1511,8 +1506,8 @@ function drawRevenueChart(ctx, labels, values, previousValues, ranges) {
 
   ctx.fillStyle = "#1d2a21";
   ctx.font = "11px Manrope";
-  const maxLabel = `MAX: ${formatMoneyCompact(maxValue)} (${formatDate(labels[maxIndex])})`;
-  const minLabel = `MIN: ${formatMoneyCompact(minValue)} (${formatDate(labels[minIndex])})`;
+  const maxLabel = `MAX: ${formatMoneyCompact(maxValue)} (${currentSeries[maxIndex].label})`;
+  const minLabel = `MIN: ${formatMoneyCompact(minValue)} (${currentSeries[minIndex].label})`;
   ctx.fillText(maxLabel, padding.left, 14);
   ctx.fillText(minLabel, padding.left, 30);
   ctx.fillText(`СРЕДНЕЕ: ${formatMoneyCompact(avg)} | ИТОГО: ${formatMoneyCompact(total)}`, padding.left, 46);
@@ -1523,26 +1518,26 @@ function drawRevenueChart(ctx, labels, values, previousValues, ranges) {
   ctx.font = "11px Manrope";
   ticks.forEach((idx) => {
     const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + idx * stepX;
-    const txt = formatDate(labels[idx]);
+    const txt = formatChartXAxisLabel(currentSeries[idx], groupBy);
     const tw = ctx.measureText(txt).width;
     ctx.fillText(txt, x - tw / 2, height - 8);
   });
 
   // Legend
   drawLegend(ctx, Math.max(padding.left + 6, width - padding.right - 240), 10, [
-    { color: "rgba(15, 118, 110, 0.32)", text: "Выручка за день", box: true },
-    { color: "#b45309", text: "Скользящее среднее (7д)", box: false },
+    { color: "rgba(15, 118, 110, 0.32)", text: `Выручка за ${periodNoun}`, box: true },
+    { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false },
     { color: "#475569", text: "Предыдущий период", box: false, dashed: true }
   ]);
 
-  const points = labels.map((date, i) => {
+  const points = labels.map((_, i) => {
     const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
     return {
       index: i,
       x,
-      currentDate: date,
+      currentLabel: currentSeries[i].label,
       currentValue: values[i] || 0,
-      previousDate: ranges && isoToDate(ranges.previous.from) ? dateToIso(addDays(isoToDate(ranges.previous.from), i)) : null,
+      previousLabel: i < previousSeries.length ? previousSeries[i].label : null,
       previousValue: previousValues[i]
     };
   });
@@ -1559,25 +1554,17 @@ function resolveChartRanges(rows, from, to) {
   return { current: currentCopy, previous, mode };
 }
 
-function buildDateRange(fromIso, toIso) {
-  const fromDate = isoToDate(fromIso);
-  const toDate = isoToDate(toIso);
-  if (!fromDate || !toDate || fromDate > toDate) return [];
-  const out = [];
-  for (let d = new Date(fromDate); d <= toDate; d = addDays(d, 1)) {
-    out.push(dateToIso(d));
-  }
-  return out;
-}
-
-function aggregateByDate(rows, from, to) {
+function aggregateRangeByPeriod(rows, from, to, mode) {
   const map = new Map();
   rows.forEach((r) => {
     if (r.date === "Без даты") return;
     if (r.date < from || r.date > to) return;
-    map.set(r.date, (map.get(r.date) || 0) + r.revenue);
+    const period = getPeriodInfo(r.date, mode);
+    const bucket = map.get(period.key) || { key: period.key, label: period.label, sortDate: period.sortDate, total: 0 };
+    bucket.total += r.revenue;
+    map.set(period.key, bucket);
   });
-  return map;
+  return Array.from(map.values()).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
 }
 
 function getMovingAverage(values, windowSize) {
@@ -1599,6 +1586,19 @@ function getTickIndexes(length, maxTicks) {
   for (let i = step; i < length - 1; i += step) ticks.push(i);
   if (ticks[ticks.length - 1] !== length - 1) ticks.push(length - 1);
   return ticks;
+}
+
+function formatChartXAxisLabel(period, mode) {
+  if (!period) return "";
+  if (mode === "month") {
+    const [m, y] = String(period.label).split(".");
+    return `${m}.${String(y).slice(-2)}`;
+  }
+  if (mode === "week") {
+    const start = String(period.label).split(" - ")[0];
+    return start.slice(0, 5);
+  }
+  return String(period.label).slice(0, 5);
 }
 
 function drawDot(ctx, x, y, color) {
@@ -1664,12 +1664,12 @@ function onChartPointerMove(event) {
 
   const prevText = nearest.previousValue == null
     ? '<span class="muted">Пред. период: нет данных</span>'
-    : `Пред. период (${formatDate(nearest.previousDate)}): <strong>${formatMoney(nearest.previousValue)}</strong>`;
+    : `Пред. период (${nearest.previousLabel}): <strong>${formatMoney(nearest.previousValue)}</strong>`;
   const diff = nearest.previousValue == null ? null : nearest.currentValue - nearest.previousValue;
   const diffText = diff == null ? "" : `Разница: <strong>${diff >= 0 ? "+" : ""}${formatMoney(diff)}</strong>`;
 
   els.chartTooltip.innerHTML = `
-    <strong>${formatDate(nearest.currentDate)}</strong>
+    <strong>${nearest.currentLabel}</strong>
     Текущий период: <strong>${formatMoney(nearest.currentValue)}</strong><br/>
     ${prevText}<br/>
     ${diffText}

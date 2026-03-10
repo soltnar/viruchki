@@ -27,6 +27,7 @@ const els = {
   compareStats: document.getElementById("compareStats"),
   chartGroupBy: document.getElementById("chartGroupBy"),
   chartCompareView: document.getElementById("chartCompareView"),
+  enableComparison: document.getElementById("enableComparison"),
   viewWarehouses: document.getElementById("viewWarehouses"),
   detailSort: document.getElementById("detailSort"),
   detailGroupBy: document.getElementById("detailGroupBy"),
@@ -34,6 +35,7 @@ const els = {
   collapseAllRows: document.getElementById("collapseAllRows"),
   exportExcel: document.getElementById("exportExcel"),
   exportPdf: document.getElementById("exportPdf"),
+  exportChartPng: document.getElementById("exportChartPng"),
   downloadLog: document.getElementById("downloadLog"),
   tableBody: document.getElementById("tableBody"),
   dateTotalsBody: document.getElementById("dateTotalsBody"),
@@ -62,6 +64,7 @@ els.comparePrevFrom.addEventListener("change", applyFilters);
 els.comparePrevTo.addEventListener("change", applyFilters);
 els.chartGroupBy.addEventListener("change", applyFilters);
 els.chartCompareView.addEventListener("change", applyFilters);
+els.enableComparison.addEventListener("change", applyFilters);
 els.tableBody.addEventListener("click", onTableClick);
 els.viewWarehouses.addEventListener("change", () => {
   state.showWarehouses = Boolean(els.viewWarehouses.checked);
@@ -81,6 +84,7 @@ els.expandAllRows.addEventListener("click", expandAllGroups);
 els.collapseAllRows.addEventListener("click", collapseAllGroups);
 els.exportExcel.addEventListener("click", exportToExcelPivot);
 els.exportPdf.addEventListener("click", exportToPdf);
+els.exportChartPng.addEventListener("click", exportChartToPng);
 els.downloadLog.addEventListener("click", downloadDebugLog);
 els.chart.addEventListener("mousemove", onChartPointerMove);
 els.chart.addEventListener("mouseleave", hideChartTooltip);
@@ -149,7 +153,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-10.44" });
+  appendDebugLog("info", "app_start", { version: "2026-03-10.45" });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -835,6 +839,24 @@ function renderComparison(rows, from, to) {
     els.compareStats.innerHTML = '<article class="stat"><p class="stat-title">Сравнение</p><p class="stat-value">Выберите период</p></article>';
     return;
   }
+  if (!isComparisonEnabled()) {
+    const currentTotalOnly = sumByRange(rows, currentRange.from, currentRange.to);
+    els.compareStats.innerHTML = `
+      <article class="stat">
+        <p class="stat-title">Текущий период (${formatDate(currentRange.from)} - ${formatDate(currentRange.to)})</p>
+        <p class="stat-value">${formatMoney(currentTotalOnly)}</p>
+      </article>
+      <article class="stat">
+        <p class="stat-title">Сравнение</p>
+        <p class="stat-value">Отключено</p>
+      </article>
+      <article class="stat">
+        <p class="stat-title">Подсказка</p>
+        <p class="stat-value">Включите «Включить сравнение» для сопоставления периодов</p>
+      </article>
+    `;
+    return;
+  }
 
   const mode = els.compareMode.value || "wow";
   const previousRange = resolvePreviousRange(currentRange, mode);
@@ -1366,7 +1388,10 @@ function renderChart(baseRows, from, to) {
   hideChartTooltip();
 
   const groupBy = els.chartGroupBy ? els.chartGroupBy.value || "day" : "day";
-  const compareView = els.chartCompareView ? els.chartCompareView.value || "overlay" : "overlay";
+  const compareView = isComparisonEnabled()
+    ? (els.chartCompareView ? els.chartCompareView.value || "overlay" : "overlay")
+    : "none";
+  if (els.chartCompareView) els.chartCompareView.disabled = !isComparisonEnabled();
   const ranges = resolveChartRanges(baseRows, from, to);
   if (!ranges) {
     state.chartMeta = null;
@@ -1376,7 +1401,9 @@ function renderChart(baseRows, from, to) {
   }
 
   const currentSeries = aggregateRangeByPeriod(baseRows, ranges.current.from, ranges.current.to, groupBy);
-  const previousSeries = aggregateRangeByPeriod(baseRows, ranges.previous.from, ranges.previous.to, groupBy);
+  const previousSeries = ranges.previous
+    ? aggregateRangeByPeriod(baseRows, ranges.previous.from, ranges.previous.to, groupBy)
+    : [];
   state.chartMeta = drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, compareView);
 }
 
@@ -1398,13 +1425,14 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   const values = currentSeries.map((p) => p.total);
   const previousValues = currentSeries.map((_, i) => (i < previousSeries.length ? previousSeries[i].total : null));
   const isIndexMode = compareView === "index_100";
+  const comparisonEnabled = compareView !== "none";
   const averageWindow = groupBy === "day" ? 7 : groupBy === "week" ? 4 : 3;
   const averageLabelSuffix = groupBy === "day" ? "дн" : groupBy === "week" ? "нед" : "мес";
   const periodNoun = groupBy === "day" ? "день" : groupBy === "week" ? "неделю" : "месяц";
   const currentIndexed = isIndexMode ? toIndexSeries(values) : null;
   const previousIndexed = isIndexMode ? toIndexSeries(previousValues) : null;
   const currentPlotValues = isIndexMode ? currentIndexed : values;
-  const previousPlotValues = isIndexMode ? previousIndexed : previousValues;
+  const previousPlotValues = comparisonEnabled ? (isIndexMode ? previousIndexed : previousValues) : [];
 
   if (!values.length) {
     state.chartMeta = null;
@@ -1465,7 +1493,7 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   ctx.stroke();
 
   const barW = Math.max(3, Math.min(16, stepX * 0.6 || plotW * 0.5));
-  if (!isIndexMode && compareView === "side_by_side") {
+  if (!isIndexMode && compareView === "side_by_side" && comparisonEnabled) {
     const pairW = Math.max(4, Math.min(18, barW * 0.92));
     const offset = pairW * 0.55;
     values.forEach((v, i) => {
@@ -1530,7 +1558,7 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   if (!isIndexMode) ctx.stroke();
 
   // Previous period line (overlay/index modes)
-  const hasPreviousData = previousPlotValues.some((v) => v != null);
+  const hasPreviousData = comparisonEnabled && previousPlotValues.some((v) => v != null);
   if (hasPreviousData && compareView !== "side_by_side") {
     ctx.setLineDash([6, 4]);
     ctx.strokeStyle = "#475569";
@@ -1583,7 +1611,12 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   });
 
   // Legend
-  const legendItems = isIndexMode
+  const legendItems = !comparisonEnabled
+    ? [
+      { color: "rgba(15, 118, 110, 0.32)", text: `Выручка за ${periodNoun}`, box: true },
+      { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false }
+    ]
+    : isIndexMode
     ? [
       { color: "#0f766e", text: "Текущий период (индекс)", box: false },
       { color: "#475569", text: "Предыдущий период (индекс)", box: false, dashed: true }
@@ -1621,6 +1654,7 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
 function resolveChartRanges(rows, from, to) {
   const current = resolveCurrentRange(rows, from, to);
   if (!current) return null;
+  if (!isComparisonEnabled()) return { current: { ...current }, previous: null, mode: "off" };
   const mode = els.compareMode.value || "wow";
   const currentCopy = { ...current };
   const previous = resolvePreviousRange(currentCopy, mode);
@@ -1783,6 +1817,22 @@ function onChartPointerMove(event) {
 
 function hideChartTooltip() {
   if (els.chartTooltip) els.chartTooltip.hidden = true;
+}
+
+function isComparisonEnabled() {
+  return !els.enableComparison || Boolean(els.enableComparison.checked);
+}
+
+function exportChartToPng() {
+  if (!els.chart || !els.chart.width || !els.chart.height) {
+    alert("График пока пуст. Загрузите данные.");
+    return;
+  }
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+  link.href = els.chart.toDataURL("image/png");
+  link.download = `график_выручки_${stamp}.png`;
+  link.click();
 }
 
 function formatMoneyCompact(value) {

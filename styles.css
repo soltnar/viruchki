@@ -218,7 +218,8 @@ h2 {
 #downloadLog,
 #exportExcel,
 #expandAllRows,
-#collapseAllRows {
+#collapseAllRows,
+#exportChartPng {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;

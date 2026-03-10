@@ -280,7 +280,52 @@ h2 {
 }
 
 .compare-header h2 {
-  margin: 0;
+  margin: 0 0 2px;
+}
+
+.compare-panel {
+  border-color: #d8e4d6;
+}
+
+.compare-filters {
+  background: #fbfdfb;
+  border: 1px solid #e7efe4;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.compare-filters .filter-group label {
+  font-size: 0.95rem;
+}
+
+.compare-stats .stat {
+  border: 1px solid #dfe9dc;
+  box-shadow: 0 1px 0 rgba(16, 24, 16, 0.02);
+}
+
+.compare-stats .stat--current {
+  border-left: 4px solid #0f766e;
+}
+
+.compare-stats .stat--previous {
+  border-left: 4px solid #6b7280;
+}
+
+.compare-stats .stat--diff-up {
+  border-left: 4px solid #15803d;
+  background: #f4fbf5;
+}
+
+.compare-stats .stat--diff-down {
+  border-left: 4px solid #b91c1c;
+  background: #fff6f6;
+}
+
+.stat-meta {
+  margin: 4px 0 0;
+  font-size: 0.86rem;
+  color: var(--subtle);
 }
 
 .hidden-soft {
@@ -522,6 +567,10 @@ th {
 
   .compare-header .table-toggle {
     width: 100%;
+  }
+
+  .compare-filters {
+    padding: 10px;
   }
 
   .chart-controls .table-toggle {

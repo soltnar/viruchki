@@ -220,7 +220,7 @@ function downloadDebugLog() {
     list = [];
   }
   const payload = {
-    appVersion: "2026-03-10.51",
+    appVersion: "2026-03-10.52",
     exportedAt: new Date().toISOString(),
     logs: list
   };
@@ -1001,15 +1001,22 @@ function updateComparisonUI() {
 function renderComparison(rows, from, to) {
   const currentRange = resolveCurrentRange(rows, from, to);
   if (!currentRange) {
-    els.compareStats.innerHTML = '<article class="stat"><p class="stat-title">Сравнение</p><p class="stat-value">Выберите период</p></article>';
+    els.compareStats.innerHTML = `
+      <article class="stat">
+        <p class="stat-title">Сравнение</p>
+        <p class="stat-value">Выберите период</p>
+        <p class="stat-meta">Укажите даты в блоке выше.</p>
+      </article>
+    `;
     return;
   }
   if (!isComparisonEnabled()) {
     const currentTotalOnly = sumByRange(rows, currentRange.from, currentRange.to);
     els.compareStats.innerHTML = `
-      <article class="stat">
+      <article class="stat stat--current">
         <p class="stat-title">Текущий период (${formatDate(currentRange.from)} - ${formatDate(currentRange.to)})</p>
         <p class="stat-value">${formatMoney(currentTotalOnly)}</p>
+        <p class="stat-meta">Сравнение отключено.</p>
       </article>
     `;
     return;
@@ -1018,7 +1025,13 @@ function renderComparison(rows, from, to) {
   const mode = els.compareMode.value || "wow";
   const previousRange = resolvePreviousRange(currentRange, mode);
   if (!previousRange) {
-    els.compareStats.innerHTML = '<article class="stat"><p class="stat-title">Сравнение</p><p class="stat-value">Укажите предыдущий период</p></article>';
+    els.compareStats.innerHTML = `
+      <article class="stat">
+        <p class="stat-title">Сравнение</p>
+        <p class="stat-value">Укажите предыдущий период</p>
+        <p class="stat-meta">Выберите период A/B или заполните пользовательский диапазон.</p>
+      </article>
+    `;
     return;
   }
 
@@ -1026,19 +1039,22 @@ function renderComparison(rows, from, to) {
   const previousTotal = sumByRange(rows, previousRange.from, previousRange.to);
   const diff = currentTotal - previousTotal;
   const pct = previousTotal === 0 ? null : (diff / previousTotal) * 100;
+  const diffClass = diff >= 0 ? "stat--diff-up" : "stat--diff-down";
+  const diffLabel = diff >= 0 ? "Рост" : "Снижение";
 
   els.compareStats.innerHTML = `
-    <article class="stat">
+    <article class="stat stat--current">
       <p class="stat-title">Текущий период (${formatDate(currentRange.from)} - ${formatDate(currentRange.to)})</p>
       <p class="stat-value">${formatMoney(currentTotal)}</p>
     </article>
-    <article class="stat">
+    <article class="stat stat--previous">
       <p class="stat-title">Предыдущий период (${formatDate(previousRange.from)} - ${formatDate(previousRange.to)})</p>
       <p class="stat-value">${formatMoney(previousTotal)}</p>
     </article>
-    <article class="stat">
+    <article class="stat ${diffClass}">
       <p class="stat-title">Разница</p>
       <p class="stat-value">${diff >= 0 ? "+" : ""}${formatMoney(diff)}${pct == null ? "" : ` (${diff >= 0 ? "+" : ""}${pct.toFixed(1)}%)`}</p>
+      <p class="stat-meta">${diffLabel}</p>
     </article>
   `;
 }

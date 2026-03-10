@@ -5,10 +5,30 @@ const state = {
   showWarehouses: true,
   detailSort: "revenue_desc",
   compareOptions: [],
-  chartMeta: null
+  chartMeta: null,
+  loadedFiles: [],
+  exclusionRules: []
 };
 
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
+const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
+const DEFAULT_EXCLUSION_RULES = [
+  "Онлайн оплата, СБП",
+  "Основной склад",
+  "БУРГЕР БИК ООО Чайка",
+  "Бургер Бик",
+  "Фабрика разделка",
+  "Шале №15",
+  "Совнаркомовская 13",
+  "НТО ООО Приспех пр-кт Гагарина, д. 35",
+  "Юность ул. Зеленский Съезд, д. 8/10",
+  "ИП Амельченко Евгений Андреевич",
+  "Фудтрак Амельченко пл. Маркина, д. 12А",
+  "Фабрика кондитерка",
+  "ул. Большая Покровская, д. 13",
+  "Швейцария БИК \"ПРИСПЕХ\"",
+  "Фабрика пекарня"
+];
 
 const els = {
   files: document.getElementById("files"),
@@ -41,12 +61,16 @@ const els = {
   dateTotalsBody: document.getElementById("dateTotalsBody"),
   stats: document.getElementById("stats"),
   chart: document.getElementById("chart"),
-  chartTooltip: document.getElementById("chartTooltip")
+  chartTooltip: document.getElementById("chartTooltip"),
+  exclusionInput: document.getElementById("exclusionInput"),
+  addExclusionBtn: document.getElementById("addExclusionBtn"),
+  exclusionList: document.getElementById("exclusionList")
 };
 
 let chartCtx = null;
 
 initDebugLogging();
+initExclusionRules();
 
 els.files.addEventListener("change", handleFiles);
 els.restaurantFilter.addEventListener("change", applyFilters);
@@ -89,6 +113,15 @@ els.exportExcel.addEventListener("click", exportToExcelPivot);
 els.exportPdf.addEventListener("click", exportToPdf);
 els.exportChartPng.addEventListener("click", exportChartToPng);
 els.downloadLog.addEventListener("click", downloadDebugLog);
+els.addExclusionBtn.addEventListener("click", onAddExclusionRule);
+els.exclusionInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    onAddExclusionRule();
+  }
+});
+els.exclusionList.addEventListener("change", onExclusionListChange);
+els.exclusionList.addEventListener("click", onExclusionListClick);
 els.chart.addEventListener("mousemove", onChartPointerMove);
 els.chart.addEventListener("mouseleave", hideChartTooltip);
 els.chart.addEventListener("touchstart", onChartPointerMove, { passive: true });
@@ -101,7 +134,11 @@ updateWarehouseActionButtons();
 function handleFiles(event) {
   const files = Array.from(event.target.files || []);
   if (!files.length) return;
+  state.loadedFiles = files;
+  processFiles(files);
+}
 
+function processFiles(files) {
   if (typeof XLSX === "undefined") {
     appendDebugLog("error", "xlsx_not_loaded", {});
     alert("Библиотека XLSX не загрузилась. Проверьте интернет и обновите страницу (Cmd+Shift+R).");
@@ -157,7 +194,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-10.47" });
+  appendDebugLog("info", "app_start", { version: "2026-03-10.48" });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -181,7 +218,7 @@ function downloadDebugLog() {
     list = [];
   }
   const payload = {
-    appVersion: "2026-03-10.47",
+    appVersion: "2026-03-10.48",
     exportedAt: new Date().toISOString(),
     logs: list
   };
@@ -194,6 +231,116 @@ function downloadDebugLog() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+function initExclusionRules() {
+  const stored = readStoredExclusionRules();
+  const byId = new Map(stored.map((r) => [r.id, r]));
+  const defaults = DEFAULT_EXCLUSION_RULES.map((label) => {
+    const id = `default:${normalizeNameKey(label)}`;
+    const prev = byId.get(id);
+    return {
+      id,
+      label,
+      key: normalizeNameKey(label),
+      enabled: prev ? Boolean(prev.enabled) : true,
+      isDefault: true
+    };
+  });
+  const custom = stored
+    .filter((r) => !r.isDefault)
+    .map((r) => ({
+      id: r.id || `custom:${Date.now()}:${Math.random().toString(16).slice(2)}`,
+      label: String(r.label || "").trim(),
+      key: normalizeNameKey(r.label || ""),
+      enabled: Boolean(r.enabled),
+      isDefault: false
+    }))
+    .filter((r) => r.label && r.key);
+  state.exclusionRules = [...defaults, ...custom];
+  saveExclusionRules();
+  renderExclusionRules();
+}
+
+function readStoredExclusionRules() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(EXCLUSION_RULES_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveExclusionRules() {
+  localStorage.setItem(EXCLUSION_RULES_KEY, JSON.stringify(state.exclusionRules));
+}
+
+function renderExclusionRules() {
+  if (!els.exclusionList) return;
+  if (!state.exclusionRules.length) {
+    els.exclusionList.innerHTML = '<div class="empty">Исключений нет</div>';
+    return;
+  }
+  els.exclusionList.innerHTML = state.exclusionRules
+    .map(
+      (r) => `
+      <div class="exclusion-item">
+        <input type="checkbox" data-action="toggle" data-id="${escapeHtml(r.id)}" ${r.enabled ? "checked" : ""} />
+        <div>
+          <div>${escapeHtml(r.label)}</div>
+          <div class="exclusion-meta">${r.isDefault ? "системное" : "пользовательское"}</div>
+        </div>
+        ${r.isDefault ? "<span></span>" : `<button type="button" data-action="remove" data-id="${escapeHtml(r.id)}">Удалить</button>`}
+      </div>
+    `
+    )
+    .join("");
+}
+
+function onAddExclusionRule() {
+  const label = String(els.exclusionInput.value || "").trim();
+  const key = normalizeNameKey(label);
+  if (!label || !key) return;
+  const exists = state.exclusionRules.some((r) => r.key === key);
+  if (exists) {
+    alert("Такой объект уже есть в исключениях.");
+    return;
+  }
+  state.exclusionRules.push({
+    id: `custom:${Date.now()}:${Math.random().toString(16).slice(2)}`,
+    label,
+    key,
+    enabled: true,
+    isDefault: false
+  });
+  els.exclusionInput.value = "";
+  persistExclusionsAndRebuild();
+}
+
+function onExclusionListChange(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.dataset.action !== "toggle") return;
+  const id = target.dataset.id;
+  const rule = state.exclusionRules.find((r) => r.id === id);
+  if (!rule) return;
+  rule.enabled = target.checked;
+  persistExclusionsAndRebuild();
+}
+
+function onExclusionListClick(event) {
+  const btn = event.target.closest("button[data-action='remove']");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  state.exclusionRules = state.exclusionRules.filter((r) => r.id !== id);
+  persistExclusionsAndRebuild();
+}
+
+function persistExclusionsAndRebuild() {
+  saveExclusionRules();
+  renderExclusionRules();
+  if (state.loadedFiles.length) processFiles(state.loadedFiles);
+  else applyFilters();
 }
 
 function parseFile(file) {
@@ -726,22 +873,7 @@ function cleanRestaurantName(value) {
 function isBlockedRestaurantName(value) {
   const key = normalizeNameKey(value);
   if (!key) return false;
-  if (key.includes("онлайн оплата") && key.includes("сбп")) return true;
-  if (key === "основной склад") return true;
-  if (key.includes("бургер бик") && key.includes("чайка")) return true;
-  if (key === "бургер бик") return true;
-  if (key.includes("фабрика разделка")) return true;
-  if (key.includes("шале") && key.includes("15")) return true;
-  if (key.includes("совнаркомовская") && key.includes("13")) return true;
-  if (key.includes("нто ооо приспех") && key.includes("гагарина") && key.includes("35")) return true;
-  if (key.includes("юность") && key.includes("зеленск") && key.includes("съезд")) return true;
-  if (key.includes("ип амельченко") && key.includes("андреевич")) return true;
-  if (key.includes("фудтрак амельченко") && key.includes("маркина")) return true;
-  if (key.includes("фабрика кондитерка")) return true;
-  if (key.includes("большая покровская") && key.includes("13")) return true;
-  if (key.includes("швейцария") && key.includes("бик") && key.includes("приспех")) return true;
-  if (key.includes("фабрика пекарня")) return true;
-  return false;
+  return state.exclusionRules.some((rule) => rule.enabled && rule.key && key.includes(rule.key));
 }
 
 function toNumber(value) {
@@ -856,6 +988,7 @@ function updateComparisonUI() {
   const comparisonOnlyBlocks = document.querySelectorAll(".comparison-only");
   comparisonOnlyBlocks.forEach((el) => el.classList.toggle("hidden-soft", !enabled));
   if (els.chartCompareView) els.chartCompareView.disabled = !enabled;
+  updatePrintModeFlags();
   toggleCompareCustom();
 }
 
@@ -1277,6 +1410,7 @@ function getPeriodInfo(isoDate, mode) {
 }
 
 function exportToPdf() {
+  updatePrintModeFlags();
   window.print();
 }
 
@@ -1853,6 +1987,10 @@ function exportChartToPng() {
   link.click();
 }
 
+function updatePrintModeFlags() {
+  document.body.classList.toggle("print-hide-comparison", !isComparisonEnabled());
+}
+
 function formatMoneyCompact(value) {
   const abs = Math.abs(value || 0);
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} млн ₽`;
@@ -1878,6 +2016,11 @@ function formatDate(isoDate) {
   const [y, m, d] = isoDate.split("-");
   return `${d}.${m}.${y}`;
 }
+
+window.addEventListener("beforeprint", updatePrintModeFlags);
+window.addEventListener("afterprint", () => {
+  document.body.classList.remove("print-hide-comparison");
+});
 
 window.addEventListener("resize", () => {
   const from = normalizeFilterDate(els.dateFrom.value);

@@ -4,7 +4,8 @@ const state = {
   expandedGroups: new Set(),
   showWarehouses: true,
   detailSort: "revenue_desc",
-  compareOptions: []
+  compareOptions: [],
+  chartMeta: null
 };
 
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
@@ -35,7 +36,8 @@ const els = {
   tableBody: document.getElementById("tableBody"),
   dateTotalsBody: document.getElementById("dateTotalsBody"),
   stats: document.getElementById("stats"),
-  chart: document.getElementById("chart")
+  chart: document.getElementById("chart"),
+  chartTooltip: document.getElementById("chartTooltip")
 };
 
 let chartCtx = null;
@@ -76,6 +78,11 @@ els.collapseAllRows.addEventListener("click", collapseAllGroups);
 els.exportExcel.addEventListener("click", exportToExcelPivot);
 els.exportPdf.addEventListener("click", exportToPdf);
 els.downloadLog.addEventListener("click", downloadDebugLog);
+els.chart.addEventListener("mousemove", onChartPointerMove);
+els.chart.addEventListener("mouseleave", hideChartTooltip);
+els.chart.addEventListener("touchstart", onChartPointerMove, { passive: true });
+els.chart.addEventListener("touchmove", onChartPointerMove, { passive: true });
+els.chart.addEventListener("touchend", hideChartTooltip);
 toggleCompareCustom();
 updateWarehouseActionButtons();
 
@@ -138,7 +145,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-09.40" });
+  appendDebugLog("info", "app_start", { version: "2026-03-10.41" });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -807,7 +814,7 @@ function applyFilters() {
   renderComparison(baseRows, from, to);
   renderDateTotals(state.filteredRows);
   renderTable(state.filteredRows);
-  renderChart(state.filteredRows);
+  renderChart(baseRows, from, to);
 }
 
 function toggleCompareCustom() {
@@ -1349,25 +1356,39 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function renderChart(rows) {
+function renderChart(baseRows, from, to) {
   const ctx = els.chart.getContext("2d");
   if (!chartCtx) chartCtx = ctx;
+  hideChartTooltip();
 
-  ctx.clearRect(0, 0, els.chart.width, els.chart.height);
+  const ranges = resolveChartRanges(baseRows, from, to);
+  if (!ranges) {
+    state.chartMeta = null;
+    hideChartTooltip();
+    drawRevenueChart(ctx, [], [], [], null);
+    return;
+  }
 
-  const byDate = new Map();
-  rows.forEach((r) => {
-    if (r.date === "Без даты") return;
-    byDate.set(r.date, (byDate.get(r.date) || 0) + r.revenue);
+  const currentDates = buildDateRange(ranges.current.from, ranges.current.to);
+  const previousFromDate = isoToDate(ranges.previous.from);
+  const previousToDate = isoToDate(ranges.previous.to);
+  const hasValidPreviousRange = Boolean(previousFromDate && previousToDate);
+  const currentByDate = aggregateByDate(baseRows, ranges.current.from, ranges.current.to);
+  const previousByDate = aggregateByDate(baseRows, ranges.previous.from, ranges.previous.to);
+
+  const currentValues = currentDates.map((d) => currentByDate.get(d) || 0);
+  const previousValues = currentDates.map((_, index) => {
+    if (!hasValidPreviousRange) return null;
+    const pd = addDays(previousFromDate, index);
+    const pIso = dateToIso(pd);
+    if (pd > previousToDate) return null;
+    return previousByDate.get(pIso) || 0;
   });
 
-  const dates = Array.from(byDate.keys()).sort((a, b) => a.localeCompare(b));
-  const values = dates.map((d) => byDate.get(d));
-
-  drawRevenueChart(ctx, dates, values);
+  state.chartMeta = drawRevenueChart(ctx, currentDates, currentValues, previousValues, ranges);
 }
 
-function drawRevenueChart(ctx, labels, values) {
+function drawRevenueChart(ctx, labels, values, previousValues, ranges) {
   const canvas = els.chart;
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -1383,16 +1404,18 @@ function drawRevenueChart(ctx, labels, values) {
   ctx.clearRect(0, 0, width, height);
 
   if (!values.length) {
+    state.chartMeta = null;
     ctx.fillStyle = "#5d6a61";
     ctx.font = "14px Manrope";
     ctx.fillText("Нет данных для графика", 12, 24);
-    return;
+    return null;
   }
 
   const padding = { top: 54, right: 16, bottom: 30, left: 74 };
   const plotW = width - padding.left - padding.right;
   const plotH = height - padding.top - padding.bottom;
-  const max = Math.max(...values);
+  const previousOnlyNumbers = previousValues.filter((v) => v != null);
+  const max = Math.max(...values, ...(previousOnlyNumbers.length ? previousOnlyNumbers : [0]));
   const yMax = max > 0 ? max * 1.08 : 1;
   const yMin = 0;
   const yRange = yMax - yMin;
@@ -1460,6 +1483,28 @@ function drawRevenueChart(ctx, labels, values) {
   });
   ctx.stroke();
 
+  // Previous period line
+  const hasPreviousData = previousValues.some((v) => v != null);
+  if (hasPreviousData) {
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = "#475569";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let startedPrevLine = false;
+    previousValues.forEach((v, i) => {
+      if (v == null) return;
+      const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
+      const y = padding.top + (1 - (v - yMin) / yRange) * plotH;
+      if (startedPrevLine) ctx.lineTo(x, y);
+      else {
+        ctx.moveTo(x, y);
+        startedPrevLine = true;
+      }
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   // Min/Max markers
   drawDot(ctx, labels.length === 1 ? padding.left + plotW / 2 : padding.left + maxIndex * stepX, padding.top + (1 - (maxValue - yMin) / yRange) * plotH, "#0f766e");
   drawDot(ctx, labels.length === 1 ? padding.left + plotW / 2 : padding.left + minIndex * stepX, padding.top + (1 - (minValue - yMin) / yRange) * plotH, "#5d6a61");
@@ -1484,10 +1529,55 @@ function drawRevenueChart(ctx, labels, values) {
   });
 
   // Legend
-  drawLegend(ctx, width - padding.right - 182, 10, [
+  drawLegend(ctx, Math.max(padding.left + 6, width - padding.right - 240), 10, [
     { color: "rgba(15, 118, 110, 0.32)", text: "Выручка за день", box: true },
-    { color: "#b45309", text: "Скользящее среднее (7д)", box: false }
+    { color: "#b45309", text: "Скользящее среднее (7д)", box: false },
+    { color: "#475569", text: "Предыдущий период", box: false, dashed: true }
   ]);
+
+  const points = labels.map((date, i) => {
+    const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
+    return {
+      index: i,
+      x,
+      currentDate: date,
+      currentValue: values[i] || 0,
+      previousDate: ranges && isoToDate(ranges.previous.from) ? dateToIso(addDays(isoToDate(ranges.previous.from), i)) : null,
+      previousValue: previousValues[i]
+    };
+  });
+  return { width, height, padding, points };
+}
+
+function resolveChartRanges(rows, from, to) {
+  const current = resolveCurrentRange(rows, from, to);
+  if (!current) return null;
+  const mode = els.compareMode.value || "wow";
+  const currentCopy = { ...current };
+  const previous = resolvePreviousRange(currentCopy, mode);
+  if (!previous) return null;
+  return { current: currentCopy, previous, mode };
+}
+
+function buildDateRange(fromIso, toIso) {
+  const fromDate = isoToDate(fromIso);
+  const toDate = isoToDate(toIso);
+  if (!fromDate || !toDate || fromDate > toDate) return [];
+  const out = [];
+  for (let d = new Date(fromDate); d <= toDate; d = addDays(d, 1)) {
+    out.push(dateToIso(d));
+  }
+  return out;
+}
+
+function aggregateByDate(rows, from, to) {
+  const map = new Map();
+  rows.forEach((r) => {
+    if (r.date === "Без даты") return;
+    if (r.date < from || r.date > to) return;
+    map.set(r.date, (map.get(r.date) || 0) + r.revenue);
+  });
+  return map;
 }
 
 function getMovingAverage(values, windowSize) {
@@ -1530,15 +1620,76 @@ function drawLegend(ctx, x, y, items) {
     } else {
       ctx.strokeStyle = item.color;
       ctx.lineWidth = 2;
+      if (item.dashed) ctx.setLineDash([6, 4]);
       ctx.beginPath();
       ctx.moveTo(x, curY + 6);
       ctx.lineTo(x + 14, curY + 6);
       ctx.stroke();
+      ctx.setLineDash([]);
     }
     ctx.fillStyle = "#1d2a21";
     ctx.fillText(item.text, x + 20, curY + 10);
     curY += 16;
   });
+}
+
+function onChartPointerMove(event) {
+  if (!state.chartMeta || !els.chartTooltip) return;
+  const touch = event.touches && event.touches[0] ? event.touches[0] : null;
+  const clientX = touch ? touch.clientX : event.clientX;
+  const clientY = touch ? touch.clientY : event.clientY;
+  const rect = els.chart.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+
+  const { padding, points } = state.chartMeta;
+  if (!points || !points.length) {
+    hideChartTooltip();
+    return;
+  }
+  if (x < padding.left - 20 || x > rect.width - padding.right + 20 || y < padding.top - 20 || y > rect.height - padding.bottom + 20) {
+    hideChartTooltip();
+    return;
+  }
+
+  let nearest = points[0];
+  let minDist = Math.abs(points[0].x - x);
+  for (let i = 1; i < points.length; i += 1) {
+    const d = Math.abs(points[i].x - x);
+    if (d < minDist) {
+      minDist = d;
+      nearest = points[i];
+    }
+  }
+
+  const prevText = nearest.previousValue == null
+    ? '<span class="muted">Пред. период: нет данных</span>'
+    : `Пред. период (${formatDate(nearest.previousDate)}): <strong>${formatMoney(nearest.previousValue)}</strong>`;
+  const diff = nearest.previousValue == null ? null : nearest.currentValue - nearest.previousValue;
+  const diffText = diff == null ? "" : `Разница: <strong>${diff >= 0 ? "+" : ""}${formatMoney(diff)}</strong>`;
+
+  els.chartTooltip.innerHTML = `
+    <strong>${formatDate(nearest.currentDate)}</strong>
+    Текущий период: <strong>${formatMoney(nearest.currentValue)}</strong><br/>
+    ${prevText}<br/>
+    ${diffText}
+  `;
+
+  const offset = 14;
+  const tooltipW = Math.min(320, Math.max(220, els.chartTooltip.offsetWidth || 240));
+  let left = nearest.x + offset;
+  if (left + tooltipW > rect.width - 8) left = nearest.x - tooltipW - offset;
+  if (left < 8) left = 8;
+  let top = y - 20;
+  if (top < 8) top = 8;
+
+  els.chartTooltip.style.left = `${left}px`;
+  els.chartTooltip.style.top = `${top}px`;
+  els.chartTooltip.hidden = false;
+}
+
+function hideChartTooltip() {
+  if (els.chartTooltip) els.chartTooltip.hidden = true;
 }
 
 function formatMoneyCompact(value) {
@@ -1562,4 +1713,16 @@ function formatDate(isoDate) {
   return `${d}.${m}.${y}`;
 }
 
-window.addEventListener("resize", () => renderChart(state.filteredRows));
+window.addEventListener("resize", () => {
+  const from = normalizeFilterDate(els.dateFrom.value);
+  const to = normalizeFilterDate(els.dateTo.value);
+  const selectedRestaurants = Array.from(els.restaurantFilter.selectedOptions || []).map((o) => o.value);
+  const selectedWarehouseTypes = Array.from(els.warehouseType.selectedOptions || []).map((o) => o.value);
+  const groupWarehouseCount = getGroupWarehouseCount(state.rows);
+  const baseRows = state.rows.filter((row) => {
+    if (selectedRestaurants.length && !selectedRestaurants.includes(row.group)) return false;
+    if (!matchesWarehouseType(row, selectedWarehouseTypes, groupWarehouseCount)) return false;
+    return true;
+  });
+  renderChart(baseRows, from, to);
+});

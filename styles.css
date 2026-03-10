@@ -240,6 +240,35 @@ h2 {
   max-width: 100%;
 }
 
+.chart-wrap {
+  position: relative;
+}
+
+.chart-tooltip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 8px 10px;
+  border: 1px solid #d8dfd4;
+  border-radius: 10px;
+  background: #ffffffee;
+  box-shadow: 0 8px 20px rgba(25, 40, 30, 0.14);
+  color: #1d2a21;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.chart-tooltip strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.chart-tooltip .muted {
+  color: #5d6a61;
+}
+
 .table-wrap {
   max-height: 460px;
   overflow: auto;
@@ -377,7 +406,8 @@ th {
   #chartSection,
   .table-controls,
   #downloadLog,
-  .table-controls .hint {
+  .table-controls .hint,
+  .chart-tooltip {
     display: none !important;
   }
 

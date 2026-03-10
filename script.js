@@ -62,9 +62,11 @@ const els = {
   stats: document.getElementById("stats"),
   chart: document.getElementById("chart"),
   chartTooltip: document.getElementById("chartTooltip"),
+  exclusionsDetails: document.getElementById("exclusionsDetails"),
   exclusionInput: document.getElementById("exclusionInput"),
   addExclusionBtn: document.getElementById("addExclusionBtn"),
-  exclusionList: document.getElementById("exclusionList")
+  exclusionList: document.getElementById("exclusionList"),
+  exclusionSummaryCount: document.getElementById("exclusionSummaryCount")
 };
 
 let chartCtx = null;
@@ -218,7 +220,7 @@ function downloadDebugLog() {
     list = [];
   }
   const payload = {
-    appVersion: "2026-03-10.48",
+    appVersion: "2026-03-10.50",
     exportedAt: new Date().toISOString(),
     logs: list
   };
@@ -277,6 +279,10 @@ function saveExclusionRules() {
 
 function renderExclusionRules() {
   if (!els.exclusionList) return;
+  const enabledCount = state.exclusionRules.filter((r) => r.enabled).length;
+  if (els.exclusionSummaryCount) {
+    els.exclusionSummaryCount.textContent = `${enabledCount} из ${state.exclusionRules.length} включено`;
+  }
   if (!state.exclusionRules.length) {
     els.exclusionList.innerHTML = '<div class="empty">Исключений нет</div>';
     return;
@@ -1410,6 +1416,23 @@ function getPeriodInfo(isoDate, mode) {
 }
 
 function exportToPdf() {
+  if (!state.filteredRows.length) {
+    alert("Нет данных для экспорта.");
+    return;
+  }
+  const from = normalizeFilterDate(els.dateFrom.value);
+  const to = normalizeFilterDate(els.dateTo.value);
+  const range = resolveCurrentRange(state.filteredRows, from, to);
+  const previousTitle = document.title;
+  const stamp = range
+    ? `${formatDateForFileName(range.from)}-${formatDateForFileName(range.to)}`
+    : new Date().toISOString().slice(0, 10);
+  document.title = `Выручка_ресторанов_${stamp}`;
+  const restoreTitle = () => {
+    document.title = previousTitle;
+  };
+  window.addEventListener("afterprint", restoreTitle, { once: true });
+  setTimeout(restoreTitle, 1200);
   updatePrintModeFlags();
   window.print();
 }
@@ -2015,6 +2038,11 @@ function formatDate(isoDate) {
   if (!isoDate || isoDate === "Без даты") return "Без даты";
   const [y, m, d] = isoDate.split("-");
   return `${d}.${m}.${y}`;
+}
+
+function formatDateForFileName(isoDate) {
+  if (!isoDate || isoDate === "Без даты") return "bez-daty";
+  return String(isoDate).replace(/[^\d-]/g, "");
 }
 
 window.addEventListener("beforeprint", updatePrintModeFlags);

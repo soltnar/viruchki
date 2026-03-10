@@ -218,7 +218,7 @@ function downloadDebugLog() {
     list = [];
   }
   const payload = {
-    appVersion: "2026-03-10.54",
+    appVersion: "2026-03-10.55",
     exportedAt: new Date().toISOString(),
     logs: list
   };

@@ -126,6 +126,27 @@ body {
   font-weight: 600;
 }
 
+.data-range-group {
+  grid-column: 1 / -1;
+}
+
+.data-range-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.data-range-item {
+  display: grid;
+  gap: 6px;
+}
+
+.data-range-label {
+  color: var(--subtle);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
 .filter-subtitle {
   margin: 0;
   font-size: 1rem;
@@ -603,6 +624,11 @@ th {
   }
 
   .period-switch-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .data-range-row {
     grid-template-columns: 1fr;
     gap: 6px;
   }

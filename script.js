@@ -26,6 +26,7 @@ const els = {
   compareCustomGroup: document.getElementById("compareCustomGroup"),
   compareStats: document.getElementById("compareStats"),
   chartGroupBy: document.getElementById("chartGroupBy"),
+  chartCompareView: document.getElementById("chartCompareView"),
   viewWarehouses: document.getElementById("viewWarehouses"),
   detailSort: document.getElementById("detailSort"),
   detailGroupBy: document.getElementById("detailGroupBy"),
@@ -60,6 +61,7 @@ els.comparePeriodB.addEventListener("change", applyFilters);
 els.comparePrevFrom.addEventListener("change", applyFilters);
 els.comparePrevTo.addEventListener("change", applyFilters);
 els.chartGroupBy.addEventListener("change", applyFilters);
+els.chartCompareView.addEventListener("change", applyFilters);
 els.tableBody.addEventListener("click", onTableClick);
 els.viewWarehouses.addEventListener("change", () => {
   state.showWarehouses = Boolean(els.viewWarehouses.checked);
@@ -147,7 +149,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-10.42" });
+  appendDebugLog("info", "app_start", { version: "2026-03-10.43" });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -1364,20 +1366,21 @@ function renderChart(baseRows, from, to) {
   hideChartTooltip();
 
   const groupBy = els.chartGroupBy ? els.chartGroupBy.value || "day" : "day";
+  const compareView = els.chartCompareView ? els.chartCompareView.value || "overlay" : "overlay";
   const ranges = resolveChartRanges(baseRows, from, to);
   if (!ranges) {
     state.chartMeta = null;
     hideChartTooltip();
-    drawRevenueChart(ctx, [], [], null, groupBy);
+    drawRevenueChart(ctx, [], [], null, groupBy, compareView);
     return;
   }
 
   const currentSeries = aggregateRangeByPeriod(baseRows, ranges.current.from, ranges.current.to, groupBy);
   const previousSeries = aggregateRangeByPeriod(baseRows, ranges.previous.from, ranges.previous.to, groupBy);
-  state.chartMeta = drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy);
+  state.chartMeta = drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, compareView);
 }
 
-function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy) {
+function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, compareView) {
   const canvas = els.chart;
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -1451,15 +1454,34 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy) {
   ctx.lineTo(width - padding.right, height - padding.bottom);
   ctx.stroke();
 
-  // Bars
   const barW = Math.max(3, Math.min(16, stepX * 0.6 || plotW * 0.5));
-  ctx.fillStyle = "rgba(15, 118, 110, 0.32)";
-  values.forEach((v, i) => {
-    const xCenter = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
-    const y = padding.top + (1 - (v - yMin) / yRange) * plotH;
-    const h = height - padding.bottom - y;
-    ctx.fillRect(xCenter - barW / 2, y, barW, h);
-  });
+  if (compareView === "side_by_side") {
+    const pairW = Math.max(4, Math.min(18, barW * 0.92));
+    const offset = pairW * 0.55;
+    values.forEach((v, i) => {
+      const xCenter = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
+      const yCur = padding.top + (1 - (v - yMin) / yRange) * plotH;
+      const hCur = height - padding.bottom - yCur;
+      ctx.fillStyle = "rgba(15, 118, 110, 0.48)";
+      ctx.fillRect(xCenter - offset, yCur, pairW, hCur);
+
+      const pv = previousValues[i];
+      if (pv != null) {
+        const yPrev = padding.top + (1 - (pv - yMin) / yRange) * plotH;
+        const hPrev = height - padding.bottom - yPrev;
+        ctx.fillStyle = "rgba(71, 85, 105, 0.42)";
+        ctx.fillRect(xCenter + 1, yPrev, pairW, hPrev);
+      }
+    });
+  } else {
+    ctx.fillStyle = "rgba(15, 118, 110, 0.32)";
+    values.forEach((v, i) => {
+      const xCenter = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
+      const y = padding.top + (1 - (v - yMin) / yRange) * plotH;
+      const h = height - padding.bottom - y;
+      ctx.fillRect(xCenter - barW / 2, y, barW, h);
+    });
+  }
 
   // 7-day average line
   ctx.strokeStyle = "#b45309";
@@ -1478,9 +1500,9 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy) {
   });
   ctx.stroke();
 
-  // Previous period line
+  // Previous period line (overlay mode)
   const hasPreviousData = previousValues.some((v) => v != null);
-  if (hasPreviousData) {
+  if (hasPreviousData && compareView !== "side_by_side") {
     ctx.setLineDash([6, 4]);
     ctx.strokeStyle = "#475569";
     ctx.lineWidth = 2;
@@ -1524,11 +1546,18 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy) {
   });
 
   // Legend
-  drawLegend(ctx, Math.max(padding.left + 6, width - padding.right - 240), 10, [
-    { color: "rgba(15, 118, 110, 0.32)", text: `Выручка за ${periodNoun}`, box: true },
-    { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false },
-    { color: "#475569", text: "Предыдущий период", box: false, dashed: true }
-  ]);
+  const legendItems = compareView === "side_by_side"
+    ? [
+      { color: "rgba(15, 118, 110, 0.48)", text: `Текущий период (${periodNoun})`, box: true },
+      { color: "rgba(71, 85, 105, 0.42)", text: "Предыдущий период", box: true },
+      { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false }
+    ]
+    : [
+      { color: "rgba(15, 118, 110, 0.32)", text: `Выручка за ${periodNoun}`, box: true },
+      { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false },
+      { color: "#475569", text: "Предыдущий период", box: false, dashed: true }
+    ];
+  drawLegend(ctx, Math.max(padding.left + 6, width - padding.right - 275), 10, legendItems);
 
   const points = labels.map((_, i) => {
     const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;

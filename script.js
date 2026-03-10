@@ -149,7 +149,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-10.43" });
+  appendDebugLog("info", "app_start", { version: "2026-03-10.44" });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -1397,9 +1397,14 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   const labels = currentSeries.map((p) => p.label);
   const values = currentSeries.map((p) => p.total);
   const previousValues = currentSeries.map((_, i) => (i < previousSeries.length ? previousSeries[i].total : null));
+  const isIndexMode = compareView === "index_100";
   const averageWindow = groupBy === "day" ? 7 : groupBy === "week" ? 4 : 3;
   const averageLabelSuffix = groupBy === "day" ? "дн" : groupBy === "week" ? "нед" : "мес";
   const periodNoun = groupBy === "day" ? "день" : groupBy === "week" ? "неделю" : "месяц";
+  const currentIndexed = isIndexMode ? toIndexSeries(values) : null;
+  const previousIndexed = isIndexMode ? toIndexSeries(previousValues) : null;
+  const currentPlotValues = isIndexMode ? currentIndexed : values;
+  const previousPlotValues = isIndexMode ? previousIndexed : previousValues;
 
   if (!values.length) {
     state.chartMeta = null;
@@ -1412,10 +1417,15 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   const padding = { top: 54, right: 16, bottom: 30, left: 74 };
   const plotW = width - padding.left - padding.right;
   const plotH = height - padding.top - padding.bottom;
-  const previousOnlyNumbers = previousValues.filter((v) => v != null);
-  const max = Math.max(...values, ...(previousOnlyNumbers.length ? previousOnlyNumbers : [0]));
-  const yMax = max > 0 ? max * 1.08 : 1;
-  const yMin = 0;
+  const metricPool = [
+    ...currentPlotValues.filter((v) => v != null),
+    ...previousPlotValues.filter((v) => v != null)
+  ];
+  const max = metricPool.length ? Math.max(...metricPool) : 1;
+  const min = metricPool.length ? Math.min(...metricPool) : 0;
+  const yMax = isIndexMode ? Math.max(105, max * 1.07) : (max > 0 ? max * 1.08 : 1);
+  let yMin = isIndexMode ? Math.max(0, Math.min(95, min * 0.95)) : 0;
+  if (yMax - yMin < 10) yMin = Math.max(0, yMax - 10);
   const yRange = yMax - yMin;
   const stepX = labels.length === 1 ? 0 : plotW / (labels.length - 1);
   const movingAverage = getMovingAverage(values, averageWindow);
@@ -1441,7 +1451,7 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
     ctx.lineTo(width - padding.right, y);
     ctx.stroke();
     const val = yMax - ratio * yRange;
-    const txt = formatMoneyCompact(val);
+    const txt = isIndexMode ? formatPercent(val) : formatMoneyCompact(val);
     const tw = ctx.measureText(txt).width;
     ctx.fillText(txt, padding.left - tw - 8, y + 4);
   }
@@ -1455,7 +1465,7 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   ctx.stroke();
 
   const barW = Math.max(3, Math.min(16, stepX * 0.6 || plotW * 0.5));
-  if (compareView === "side_by_side") {
+  if (!isIndexMode && compareView === "side_by_side") {
     const pairW = Math.max(4, Math.min(18, barW * 0.92));
     const offset = pairW * 0.55;
     values.forEach((v, i) => {
@@ -1473,7 +1483,7 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
         ctx.fillRect(xCenter + 1, yPrev, pairW, hPrev);
       }
     });
-  } else {
+  } else if (!isIndexMode) {
     ctx.fillStyle = "rgba(15, 118, 110, 0.32)";
     values.forEach((v, i) => {
       const xCenter = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
@@ -1483,7 +1493,26 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
     });
   }
 
-  // 7-day average line
+  // Current line in index mode
+  if (isIndexMode) {
+    ctx.strokeStyle = "#0f766e";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let startedCurIndex = false;
+    currentIndexed.forEach((v, i) => {
+      if (v == null) return;
+      const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
+      const y = padding.top + (1 - (v - yMin) / yRange) * plotH;
+      if (startedCurIndex) ctx.lineTo(x, y);
+      else {
+        ctx.moveTo(x, y);
+        startedCurIndex = true;
+      }
+    });
+    ctx.stroke();
+  }
+
+  // Moving average
   ctx.strokeStyle = "#b45309";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -1498,17 +1527,17 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
       startedAvgLine = true;
     }
   });
-  ctx.stroke();
+  if (!isIndexMode) ctx.stroke();
 
-  // Previous period line (overlay mode)
-  const hasPreviousData = previousValues.some((v) => v != null);
+  // Previous period line (overlay/index modes)
+  const hasPreviousData = previousPlotValues.some((v) => v != null);
   if (hasPreviousData && compareView !== "side_by_side") {
     ctx.setLineDash([6, 4]);
     ctx.strokeStyle = "#475569";
     ctx.lineWidth = 2;
     ctx.beginPath();
     let startedPrevLine = false;
-    previousValues.forEach((v, i) => {
+    previousPlotValues.forEach((v, i) => {
       if (v == null) return;
       const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
       const y = padding.top + (1 - (v - yMin) / yRange) * plotH;
@@ -1522,17 +1551,25 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
     ctx.setLineDash([]);
   }
 
-  // Min/Max markers
-  drawDot(ctx, labels.length === 1 ? padding.left + plotW / 2 : padding.left + maxIndex * stepX, padding.top + (1 - (maxValue - yMin) / yRange) * plotH, "#0f766e");
-  drawDot(ctx, labels.length === 1 ? padding.left + plotW / 2 : padding.left + minIndex * stepX, padding.top + (1 - (minValue - yMin) / yRange) * plotH, "#5d6a61");
+  // Min/Max markers (by current raw values)
+  drawDot(ctx, labels.length === 1 ? padding.left + plotW / 2 : padding.left + maxIndex * stepX, padding.top + (1 - ((isIndexMode ? currentIndexed[maxIndex] : maxValue) - yMin) / yRange) * plotH, "#0f766e");
+  drawDot(ctx, labels.length === 1 ? padding.left + plotW / 2 : padding.left + minIndex * stepX, padding.top + (1 - ((isIndexMode ? currentIndexed[minIndex] : minValue) - yMin) / yRange) * plotH, "#5d6a61");
 
   ctx.fillStyle = "#1d2a21";
   ctx.font = "11px Manrope";
-  const maxLabel = `MAX: ${formatMoneyCompact(maxValue)} (${currentSeries[maxIndex].label})`;
-  const minLabel = `MIN: ${formatMoneyCompact(minValue)} (${currentSeries[minIndex].label})`;
-  ctx.fillText(maxLabel, padding.left, 14);
-  ctx.fillText(minLabel, padding.left, 30);
-  ctx.fillText(`СРЕДНЕЕ: ${formatMoneyCompact(avg)} | ИТОГО: ${formatMoneyCompact(total)}`, padding.left, 46);
+  if (isIndexMode) {
+    const maxIdxVal = currentIndexed[maxIndex] == null ? 0 : currentIndexed[maxIndex];
+    const minIdxVal = currentIndexed[minIndex] == null ? 0 : currentIndexed[minIndex];
+    ctx.fillText(`MAX: ${formatPercent(maxIdxVal)} (${currentSeries[maxIndex].label})`, padding.left, 14);
+    ctx.fillText(`MIN: ${formatPercent(minIdxVal)} (${currentSeries[minIndex].label})`, padding.left, 30);
+    ctx.fillText("БАЗА ИНДЕКСА: первая точка периода = 100%", padding.left, 46);
+  } else {
+    const maxLabel = `MAX: ${formatMoneyCompact(maxValue)} (${currentSeries[maxIndex].label})`;
+    const minLabel = `MIN: ${formatMoneyCompact(minValue)} (${currentSeries[minIndex].label})`;
+    ctx.fillText(maxLabel, padding.left, 14);
+    ctx.fillText(minLabel, padding.left, 30);
+    ctx.fillText(`СРЕДНЕЕ: ${formatMoneyCompact(avg)} | ИТОГО: ${formatMoneyCompact(total)}`, padding.left, 46);
+  }
 
   // X labels
   const ticks = getTickIndexes(labels.length, 6);
@@ -1546,18 +1583,23 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   });
 
   // Legend
-  const legendItems = compareView === "side_by_side"
+  const legendItems = isIndexMode
     ? [
-      { color: "rgba(15, 118, 110, 0.48)", text: `Текущий период (${periodNoun})`, box: true },
-      { color: "rgba(71, 85, 105, 0.42)", text: "Предыдущий период", box: true },
-      { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false }
+      { color: "#0f766e", text: "Текущий период (индекс)", box: false },
+      { color: "#475569", text: "Предыдущий период (индекс)", box: false, dashed: true }
     ]
-    : [
-      { color: "rgba(15, 118, 110, 0.32)", text: `Выручка за ${periodNoun}`, box: true },
-      { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false },
-      { color: "#475569", text: "Предыдущий период", box: false, dashed: true }
-    ];
-  drawLegend(ctx, Math.max(padding.left + 6, width - padding.right - 275), 10, legendItems);
+    : compareView === "side_by_side"
+      ? [
+        { color: "rgba(15, 118, 110, 0.48)", text: `Текущий период (${periodNoun})`, box: true },
+        { color: "rgba(71, 85, 105, 0.42)", text: "Предыдущий период", box: true },
+        { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false }
+      ]
+      : [
+        { color: "rgba(15, 118, 110, 0.32)", text: `Выручка за ${periodNoun}`, box: true },
+        { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false },
+        { color: "#475569", text: "Предыдущий период", box: false, dashed: true }
+      ];
+  drawLegend(ctx, Math.max(padding.left + 6, width - padding.right - 285), 10, legendItems);
 
   const points = labels.map((_, i) => {
     const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
@@ -1567,7 +1609,10 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
       currentLabel: currentSeries[i].label,
       currentValue: values[i] || 0,
       previousLabel: i < previousSeries.length ? previousSeries[i].label : null,
-      previousValue: previousValues[i]
+      previousValue: previousValues[i],
+      currentIndex: currentIndexed ? currentIndexed[i] : null,
+      previousIndex: previousIndexed ? previousIndexed[i] : null,
+      isIndexMode
     };
   });
   return { width, height, padding, points };
@@ -1628,6 +1673,19 @@ function formatChartXAxisLabel(period, mode) {
     return start.slice(0, 5);
   }
   return String(period.label).slice(0, 5);
+}
+
+function toIndexSeries(values) {
+  let base = null;
+  for (let i = 0; i < values.length; i += 1) {
+    const v = values[i];
+    if (v != null && Number.isFinite(v) && v > 0) {
+      base = v;
+      break;
+    }
+  }
+  if (!base) return values.map(() => null);
+  return values.map((v) => (v == null ? null : (v / base) * 100));
 }
 
 function drawDot(ctx, x, y, color) {
@@ -1696,12 +1754,18 @@ function onChartPointerMove(event) {
     : `Пред. период (${nearest.previousLabel}): <strong>${formatMoney(nearest.previousValue)}</strong>`;
   const diff = nearest.previousValue == null ? null : nearest.currentValue - nearest.previousValue;
   const diffText = diff == null ? "" : `Разница: <strong>${diff >= 0 ? "+" : ""}${formatMoney(diff)}</strong>`;
+  const idxText = nearest.isIndexMode
+    ? `<br/>Индекс: <strong>${formatPercent(nearest.currentIndex)}</strong>${
+      nearest.previousIndex == null ? "" : ` vs <strong>${formatPercent(nearest.previousIndex)}</strong>`
+    }`
+    : "";
 
   els.chartTooltip.innerHTML = `
     <strong>${nearest.currentLabel}</strong>
     Текущий период: <strong>${formatMoney(nearest.currentValue)}</strong><br/>
     ${prevText}<br/>
     ${diffText}
+    ${idxText}
   `;
 
   const offset = 14;
@@ -1726,6 +1790,11 @@ function formatMoneyCompact(value) {
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} млн ₽`;
   if (abs >= 1_000) return `${(value / 1_000).toFixed(1)} тыс ₽`;
   return formatMoney(value);
+}
+
+function formatPercent(value) {
+  if (value == null || !Number.isFinite(value)) return "н/д";
+  return `${value.toFixed(1)}%`;
 }
 
 function formatMoney(value) {

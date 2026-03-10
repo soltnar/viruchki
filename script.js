@@ -157,7 +157,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-10.46" });
+  appendDebugLog("info", "app_start", { version: "2026-03-10.47" });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -181,7 +181,7 @@ function downloadDebugLog() {
     list = [];
   }
   const payload = {
-    appVersion: "2026-03-10.46",
+    appVersion: "2026-03-10.47",
     exportedAt: new Date().toISOString(),
     logs: list
   };
@@ -734,6 +734,13 @@ function isBlockedRestaurantName(value) {
   if (key.includes("шале") && key.includes("15")) return true;
   if (key.includes("совнаркомовская") && key.includes("13")) return true;
   if (key.includes("нто ооо приспех") && key.includes("гагарина") && key.includes("35")) return true;
+  if (key.includes("юность") && key.includes("зеленск") && key.includes("съезд")) return true;
+  if (key.includes("ип амельченко") && key.includes("андреевич")) return true;
+  if (key.includes("фудтрак амельченко") && key.includes("маркина")) return true;
+  if (key.includes("фабрика кондитерка")) return true;
+  if (key.includes("большая покровская") && key.includes("13")) return true;
+  if (key.includes("швейцария") && key.includes("бик") && key.includes("приспех")) return true;
+  if (key.includes("фабрика пекарня")) return true;
   return false;
 }
 

@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-17.57";
+const APP_VERSION = "2026-03-17.58";
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
 const WEATHER_IMPACT_TOGGLE_KEY = "revenue_show_weather_impact_v1";
@@ -156,7 +156,7 @@ els.collapseAllRows.addEventListener("click", collapseAllGroups);
 els.exportExcel.addEventListener("click", exportToExcelPivot);
 els.exportPdf.addEventListener("click", exportToPdf);
 els.exportChartPng.addEventListener("click", exportChartToPng);
-els.downloadLog.addEventListener("click", downloadDebugLog);
+if (els.downloadLog) els.downloadLog.addEventListener("click", downloadDebugLog);
 els.addExclusionBtn.addEventListener("click", onAddExclusionRule);
 els.exclusionInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {

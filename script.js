@@ -8,15 +8,17 @@ const state = {
   chartMeta: null,
   loadedFiles: [],
   exclusionRules: [],
+  showWeatherImpact: true,
   weatherByCityDate: { nn: {}, dzer: {} },
   weatherLoading: false,
   weatherError: "",
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-17.56";
+const APP_VERSION = "2026-03-17.57";
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
+const WEATHER_IMPACT_TOGGLE_KEY = "revenue_show_weather_impact_v1";
 const WEATHER_TIMEZONE = "Europe/Moscow";
 const WEATHER_LOCATIONS = {
   nn: { label: "Нижний Новгород", short: "НН", latitude: 56.3269, longitude: 44.0059 },
@@ -28,6 +30,22 @@ const DZER_GROUP_PATTERNS = [
   "ударник",
   "ленина 64"
 ];
+const RU_FIXED_HOLIDAYS = new Set([
+  "01-01",
+  "01-02",
+  "01-03",
+  "01-04",
+  "01-05",
+  "01-06",
+  "01-07",
+  "01-08",
+  "02-23",
+  "03-08",
+  "05-01",
+  "05-09",
+  "06-12",
+  "11-04"
+]);
 const DEFAULT_EXCLUSION_RULES = [
   "Онлайн оплата, СБП",
   "Основной склад",
@@ -74,6 +92,9 @@ const els = {
   tableBody: document.getElementById("tableBody"),
   dateTotalsBody: document.getElementById("dateTotalsBody"),
   stats: document.getElementById("stats"),
+  weatherImpactSection: document.getElementById("weatherImpactSection"),
+  weatherImpactStats: document.getElementById("weatherImpactStats"),
+  showWeatherImpact: document.getElementById("showWeatherImpact"),
   chart: document.getElementById("chart"),
   chartTooltip: document.getElementById("chartTooltip"),
   exclusionsDetails: document.getElementById("exclusionsDetails"),
@@ -87,6 +108,7 @@ let chartCtx = null;
 
 initDebugLogging();
 initExclusionRules();
+initWeatherImpactToggle();
 
 els.files.addEventListener("change", handleFiles);
 els.restaurantFilter.addEventListener("change", applyFilters);
@@ -106,6 +128,12 @@ els.chartGroupBy.addEventListener("change", applyFilters);
 els.chartCompareView.addEventListener("change", applyFilters);
 els.enableComparison.addEventListener("change", () => {
   updateComparisonUI();
+  applyFilters();
+});
+els.showWeatherImpact.addEventListener("change", () => {
+  state.showWeatherImpact = Boolean(els.showWeatherImpact.checked);
+  saveWeatherImpactToggle();
+  updateWeatherImpactUI();
   applyFilters();
 });
 els.tableBody.addEventListener("click", onTableClick);
@@ -146,6 +174,7 @@ els.chart.addEventListener("touchend", hideChartTooltip);
 toggleCompareCustom();
 updateComparisonUI();
 updateWarehouseActionButtons();
+updateWeatherImpactUI();
 
 function handleFiles(event) {
   const files = Array.from(event.target.files || []);
@@ -289,6 +318,28 @@ function readStoredExclusionRules() {
 
 function saveExclusionRules() {
   localStorage.setItem(EXCLUSION_RULES_KEY, JSON.stringify(state.exclusionRules));
+}
+
+function initWeatherImpactToggle() {
+  try {
+    const saved = localStorage.getItem(WEATHER_IMPACT_TOGGLE_KEY);
+    if (saved != null) state.showWeatherImpact = saved === "1";
+  } catch {
+    state.showWeatherImpact = true;
+  }
+  if (els.showWeatherImpact) els.showWeatherImpact.checked = state.showWeatherImpact;
+}
+
+function saveWeatherImpactToggle() {
+  try {
+    localStorage.setItem(WEATHER_IMPACT_TOGGLE_KEY, state.showWeatherImpact ? "1" : "0");
+  } catch {}
+}
+
+function updateWeatherImpactUI() {
+  document.body.classList.toggle("weather-impact-off", !state.showWeatherImpact);
+  if (!els.weatherImpactSection) return;
+  els.weatherImpactSection.classList.toggle("hidden-soft", !state.showWeatherImpact);
 }
 
 function renderExclusionRules() {
@@ -984,6 +1035,7 @@ function applyFilters() {
   renderStats(state.filteredRows);
   renderComparison(baseRows, from, to);
   updateWeatherForRows(state.filteredRows);
+  renderWeatherImpact(state.filteredRows);
   renderDateTotals(state.filteredRows);
   renderTable(state.filteredRows);
   renderChart(baseRows, from, to);
@@ -1261,12 +1313,18 @@ function normalizeFilterDate(value) {
 }
 
 function updateWeatherForRows(rows) {
+  if (!state.showWeatherImpact) {
+    state.weatherLoading = false;
+    state.weatherError = "";
+    return;
+  }
   const dates = [...new Set(rows.map((r) => r.date).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ""))))].sort(
     (a, b) => a.localeCompare(b)
   );
   if (!dates.length) {
     state.weatherLoading = false;
     state.weatherError = "";
+    renderWeatherImpact(state.filteredRows);
     return;
   }
   const cities = [...new Set(rows.map((r) => resolveWeatherCityByGroup(r.group)))];
@@ -1274,6 +1332,7 @@ function updateWeatherForRows(rows) {
   if (!missingCities.length) {
     state.weatherLoading = false;
     state.weatherError = "";
+    renderWeatherImpact(state.filteredRows);
     return;
   }
 
@@ -1291,6 +1350,7 @@ function updateWeatherForRows(rows) {
       state.weatherLoading = false;
       state.weatherError = "";
       appendDebugLog("info", "weather_fetch_ok", { cities: missingCities, from, to });
+      renderWeatherImpact(state.filteredRows);
       renderDateTotals(state.filteredRows);
     })
     .catch((error) => {
@@ -1303,8 +1363,142 @@ function updateWeatherForRows(rows) {
         from,
         to
       });
+      renderWeatherImpact(state.filteredRows);
       renderDateTotals(state.filteredRows);
     });
+}
+
+function renderWeatherImpact(rows) {
+  if (!els.weatherImpactStats) return;
+  if (!state.showWeatherImpact) {
+    els.weatherImpactStats.innerHTML = "";
+    return;
+  }
+  if (state.weatherLoading) {
+    els.weatherImpactStats.innerHTML = `
+      <article class="stat">
+        <p class="stat-title">Влияние погоды</p>
+        <p class="stat-value">Загрузка...</p>
+      </article>
+    `;
+    return;
+  }
+  const series = buildWeatherRevenueSeries(rows);
+  if (series.length < 3) {
+    els.weatherImpactStats.innerHTML = `
+      <article class="stat">
+        <p class="stat-title">Влияние погоды</p>
+        <p class="stat-value">Недостаточно данных</p>
+        <p class="stat-meta">Нужно минимум 3 дня с погодой и выручкой.</p>
+      </article>
+    `;
+    return;
+  }
+  const rev = series.map((s) => s.revenue);
+  const temps = series.map((s) => s.temp);
+  const prec = series.map((s) => s.precip);
+  const cloud = series.map((s) => s.cloud);
+  const cTemp = calcCorrelation(rev, temps);
+  const cPrec = calcCorrelation(rev, prec);
+  const cCloud = calcCorrelation(rev, cloud);
+  const lead = [
+    { title: "Температура ↔ выручка", value: cTemp },
+    { title: "Осадки ↔ выручка", value: cPrec },
+    { title: "Облачность ↔ выручка", value: cCloud }
+  ]
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))[0];
+
+  els.weatherImpactStats.innerHTML = `
+    <article class="stat">
+      <p class="stat-title">Корреляция: температура</p>
+      <p class="stat-value">${formatCorrelation(cTemp)}</p>
+      <p class="stat-meta">${describeCorrelation(cTemp)}</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Корреляция: осадки</p>
+      <p class="stat-value">${formatCorrelation(cPrec)}</p>
+      <p class="stat-meta">${describeCorrelation(cPrec)}</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Корреляция: облачность</p>
+      <p class="stat-value">${formatCorrelation(cCloud)}</p>
+      <p class="stat-meta">${describeCorrelation(cCloud)}</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Самый сильный фактор</p>
+      <p class="stat-value">${escapeHtml(lead.title)}</p>
+      <p class="stat-meta">${describeCorrelation(lead.value)} (${formatCorrelation(lead.value)})</p>
+    </article>
+  `;
+}
+
+function buildWeatherRevenueSeries(rows) {
+  const byDate = new Map();
+  rows.forEach((row) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(row.date || ""))) return;
+    const city = resolveWeatherCityByGroup(row.group);
+    const cityWeather = state.weatherByCityDate[city] && state.weatherByCityDate[city][row.date];
+    if (!cityWeather) return;
+    const bucket = byDate.get(row.date) || { revenue: 0, byCity: new Map() };
+    bucket.revenue += row.revenue;
+    const cityBucket = bucket.byCity.get(city) || { revenue: 0, weather: cityWeather };
+    cityBucket.revenue += row.revenue;
+    cityBucket.weather = cityWeather;
+    bucket.byCity.set(city, cityBucket);
+    byDate.set(row.date, bucket);
+  });
+
+  return Array.from(byDate.entries())
+    .map(([date, bucket]) => {
+      const cityEntries = Array.from(bucket.byCity.values());
+      const sumRev = cityEntries.reduce((s, c) => s + c.revenue, 0);
+      if (!sumRev) return null;
+      const weighted = cityEntries.reduce(
+        (acc, c) => {
+          const w = c.revenue / sumRev;
+          acc.temp += (Number(c.weather.tempAvg) || 0) * w;
+          acc.precip += (Number(c.weather.precip) || 0) * w;
+          acc.cloud += (Number(c.weather.cloud) || 0) * w;
+          return acc;
+        },
+        { temp: 0, precip: 0, cloud: 0 }
+      );
+      return { date, revenue: bucket.revenue, ...weighted };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function calcCorrelation(xs, ys) {
+  if (!Array.isArray(xs) || !Array.isArray(ys) || xs.length !== ys.length || xs.length < 2) return 0;
+  const n = xs.length;
+  const meanX = xs.reduce((s, v) => s + v, 0) / n;
+  const meanY = ys.reduce((s, v) => s + v, 0) / n;
+  let cov = 0;
+  let dx = 0;
+  let dy = 0;
+  for (let i = 0; i < n; i += 1) {
+    const vx = xs[i] - meanX;
+    const vy = ys[i] - meanY;
+    cov += vx * vy;
+    dx += vx * vx;
+    dy += vy * vy;
+  }
+  if (!dx || !dy) return 0;
+  return cov / Math.sqrt(dx * dy);
+}
+
+function formatCorrelation(value) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
+}
+
+function describeCorrelation(value) {
+  const abs = Math.abs(value);
+  const sign = value >= 0 ? "прямая" : "обратная";
+  if (abs < 0.1) return "Связь почти отсутствует";
+  if (abs < 0.3) return `Слабая ${sign} связь`;
+  if (abs < 0.5) return `Умеренная ${sign} связь`;
+  return `Сильная ${sign} связь`;
 }
 
 function hasWeatherCoverage(cityCode, dates) {
@@ -1418,9 +1612,11 @@ function renderTable(rows) {
 
   grouped.forEach((group) => {
     const isOpen = state.showWarehouses && state.expandedGroups.has(group.key);
+    const periodLabel = formatPeriodLabelWithSpecialDays(group.periodLabel, group.dates);
+    const rowClass = getPeriodRowClass(group.dates);
     html.push(`
-      <tr class="group-row">
-        <td>${escapeHtml(group.periodLabel)}</td>
+      <tr class="group-row ${rowClass}">
+        <td>${periodLabel}</td>
         <td>
           ${
             state.showWarehouses
@@ -1435,8 +1631,8 @@ function renderTable(rows) {
     if (state.showWarehouses && isOpen) {
       group.items.forEach((item) => {
         html.push(`
-          <tr>
-            <td>${escapeHtml(group.periodLabel)}</td>
+          <tr class="${rowClass}">
+            <td>${periodLabel}</td>
             <td class="warehouse-name">${escapeHtml(item.warehouse)}</td>
             <td class="money">${formatMoney(item.revenue)}</td>
           </tr>
@@ -1473,10 +1669,10 @@ function renderDateTotals(rows) {
   els.dateTotalsBody.innerHTML = periods
     .map(
       (period) => `
-      <tr>
-        <td>${escapeHtml(period.label)}</td>
+      <tr class="${getPeriodRowClass(period.dates)}">
+        <td>${formatPeriodLabelWithSpecialDays(period.label, period.dates)}</td>
         <td class="money">${formatMoney(period.total)}</td>
-        <td class="weather-cell">${buildWeatherCellHtml(period)}</td>
+        <td class="weather-cell weather-col">${buildWeatherCellHtml(period)}</td>
       </tr>
     `
     )
@@ -1584,6 +1780,51 @@ function getWeatherLabel(code) {
   return labels[code] || "Погодные условия";
 }
 
+function getSpecialDayInfo(isoDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(isoDate || ""))) return { weekend: false, holiday: false };
+  const d = isoToDate(isoDate);
+  if (!d) return { weekend: false, holiday: false };
+  const weekend = d.getDay() === 0 || d.getDay() === 6;
+  const mmdd = isoDate.slice(5);
+  const holiday = RU_FIXED_HOLIDAYS.has(mmdd);
+  return { weekend, holiday };
+}
+
+function summarizeSpecialDays(datesSet) {
+  const dates = Array.from(datesSet || []);
+  let weekend = 0;
+  let holiday = 0;
+  dates.forEach((date) => {
+    const info = getSpecialDayInfo(date);
+    if (info.weekend) weekend += 1;
+    if (info.holiday) holiday += 1;
+  });
+  return { count: dates.length, weekend, holiday };
+}
+
+function getPeriodRowClass(datesSet) {
+  const s = summarizeSpecialDays(datesSet);
+  if (s.holiday > 0) return "holiday-row";
+  if (s.weekend > 0) return "weekend-row";
+  return "";
+}
+
+function formatPeriodLabelWithSpecialDays(label, datesSet) {
+  const safe = escapeHtml(label);
+  const s = summarizeSpecialDays(datesSet);
+  if (!s.count) return safe;
+  if (s.count === 1) {
+    if (s.holiday) return `${safe} <span class="day-badge day-badge-holiday">Праздник</span>`;
+    if (s.weekend) return `${safe} <span class="day-badge day-badge-weekend">Выходной</span>`;
+    return safe;
+  }
+  const parts = [];
+  if (s.weekend) parts.push(`Вых: ${s.weekend}`);
+  if (s.holiday) parts.push(`Праздн: ${s.holiday}`);
+  if (!parts.length) return safe;
+  return `${safe} <span class="day-badge day-badge-mixed">${escapeHtml(parts.join(" | "))}</span>`;
+}
+
 function onTableClick(event) {
   if (!state.showWarehouses) return;
   const btn = event.target.closest(".group-toggle");
@@ -1620,8 +1861,18 @@ function groupRowsForTable(rows) {
     const key = `${period.key}__${row.group}`;
     const bucket =
       map.get(key) ||
-      { key, date: period.sortDate, periodLabel: period.label, periodKey: period.key, group: row.group, total: 0, warehouseMap: new Map() };
+      {
+        key,
+        date: period.sortDate,
+        periodLabel: period.label,
+        periodKey: period.key,
+        group: row.group,
+        total: 0,
+        warehouseMap: new Map(),
+        dates: new Set()
+      };
     bucket.total += row.revenue;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(row.date || ""))) bucket.dates.add(row.date);
     bucket.warehouseMap.set(row.warehouse, (bucket.warehouseMap.get(row.warehouse) || 0) + row.revenue);
     map.set(key, bucket);
   });
@@ -1931,6 +2182,21 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   ctx.stroke();
 
   const barW = Math.max(3, Math.min(16, stepX * 0.6 || plotW * 0.5));
+  if (groupBy === "day") {
+    currentSeries.forEach((period, i) => {
+      const info = getSpecialDayInfo(period.key);
+      if (!info.weekend && !info.holiday) return;
+      const xCenter = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;
+      const x1 = i === 0 ? padding.left : (xCenter + (labels.length === 1 ? padding.left : padding.left + (i - 1) * stepX)) / 2;
+      const x2 =
+        i === labels.length - 1
+          ? width - padding.right
+          : (xCenter + (labels.length === 1 ? width - padding.right : padding.left + (i + 1) * stepX)) / 2;
+      ctx.fillStyle = info.holiday ? "rgba(185, 28, 28, 0.10)" : "rgba(37, 99, 235, 0.08)";
+      ctx.fillRect(x1, padding.top, Math.max(1, x2 - x1), plotH);
+    });
+  }
+
   if (!isIndexMode && compareView === "side_by_side" && comparisonEnabled) {
     const pairW = Math.max(4, Math.min(18, barW * 0.92));
     const offset = pairW * 0.55;
@@ -2070,6 +2336,10 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
         { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false },
         { color: "#475569", text: "Предыдущий период", box: false, dashed: true }
       ];
+  if (groupBy === "day") {
+    legendItems.push({ color: "rgba(37, 99, 235, 0.25)", text: "Выходные", box: true });
+    legendItems.push({ color: "rgba(185, 28, 28, 0.25)", text: "Праздники", box: true });
+  }
   drawLegend(ctx, Math.max(padding.left + 6, width - padding.right - 285), 10, legendItems);
 
   const points = labels.map((_, i) => {
@@ -2078,6 +2348,7 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
       index: i,
       x,
       currentLabel: currentSeries[i].label,
+      dayKey: currentSeries[i].key,
       currentValue: values[i] || 0,
       previousLabel: i < previousSeries.length ? previousSeries[i].label : null,
       previousValue: previousValues[i],
@@ -2226,6 +2497,8 @@ function onChartPointerMove(event) {
     : `Пред. период (${nearest.previousLabel}): <strong>${formatMoney(nearest.previousValue)}</strong>`;
   const diff = nearest.previousValue == null ? null : nearest.currentValue - nearest.previousValue;
   const diffText = diff == null ? "" : `Разница: <strong>${diff >= 0 ? "+" : ""}${formatMoney(diff)}</strong>`;
+  const dayInfo = nearest.dayKey ? getSpecialDayInfo(nearest.dayKey) : { weekend: false, holiday: false };
+  const dayTypeText = dayInfo.holiday ? "Праздничный день" : dayInfo.weekend ? "Выходной день" : "";
   const idxText = nearest.isIndexMode
     ? `<br/>Индекс: <strong>${formatPercent(nearest.currentIndex)}</strong>${
       nearest.previousIndex == null ? "" : ` vs <strong>${formatPercent(nearest.previousIndex)}</strong>`
@@ -2237,6 +2510,7 @@ function onChartPointerMove(event) {
     Текущий период: <strong>${formatMoney(nearest.currentValue)}</strong><br/>
     ${prevText}<br/>
     ${diffText}
+    ${dayTypeText ? `<br/>Тип дня: <strong>${dayTypeText}</strong>` : ""}
     ${idxText}
   `;
 

@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-17.58";
+const APP_VERSION = "2026-03-17.59";
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
 const WEATHER_IMPACT_TOGGLE_KEY = "revenue_show_weather_impact_v1";
@@ -1456,7 +1456,7 @@ function buildWeatherRevenueSeries(rows) {
       const weighted = cityEntries.reduce(
         (acc, c) => {
           const w = c.revenue / sumRev;
-          acc.temp += (Number(c.weather.tempAvg) || 0) * w;
+          acc.temp += (Number(c.weather.tempDay) || 0) * w;
           acc.precip += (Number(c.weather.precip) || 0) * w;
           acc.cloud += (Number(c.weather.cloud) || 0) * w;
           return acc;
@@ -1556,17 +1556,10 @@ function parseWeatherDailyPayload(payload) {
     if (!date) continue;
     const tMax = Number(daily.temperature_2m_max && daily.temperature_2m_max[i]);
     const tMin = Number(daily.temperature_2m_min && daily.temperature_2m_min[i]);
-    const tempAvg =
-      Number.isFinite(tMax) && Number.isFinite(tMin)
-        ? (tMax + tMin) / 2
-        : Number.isFinite(tMax)
-          ? tMax
-          : Number.isFinite(tMin)
-            ? tMin
-            : 0;
+    const tempDay = Number.isFinite(tMax) ? tMax : Number.isFinite(tMin) ? tMin : 0;
     out[date] = {
       weatherCode: Number(daily.weather_code && daily.weather_code[i]) || 0,
-      tempAvg,
+      tempDay,
       cloud: Number(daily.cloud_cover_mean && daily.cloud_cover_mean[i]) || 0,
       precip: Number(daily.precipitation_sum && daily.precipitation_sum[i]) || 0
     };
@@ -1701,19 +1694,15 @@ function buildWeatherCellHtml(period) {
 }
 
 function formatWeatherSummary(list, cityCode, includeCityLabel) {
-  const avgTemp =
-    list.reduce((sum, item) => sum + (Number(item.tempAvg) || 0), 0) / Math.max(1, list.length);
-  const avgCloud =
-    list.reduce((sum, item) => sum + (Number(item.cloud) || 0), 0) / Math.max(1, list.length);
-  const precip = list.reduce((sum, item) => sum + (Number(item.precip) || 0), 0);
+  const avgTempDay =
+    list.reduce((sum, item) => sum + (Number(item.tempDay) || 0), 0) / Math.max(1, list.length);
   const weatherCode = pickDominantWeatherCode(list);
   const emoji = getWeatherEmoji(weatherCode);
   const label = getWeatherLabel(weatherCode);
   const cityPrefix = includeCityLabel ? `${WEATHER_LOCATIONS[cityCode].short}: ` : "";
-  const precipitationLabel = `${precip.toFixed(1)} мм`;
-  return `<span class="weather-line" title="${escapeHtml(label)}">${emoji} ${escapeHtml(cityPrefix)}${avgTemp.toFixed(
+  return `<span class="weather-line" title="${escapeHtml(label)}">${emoji} ${escapeHtml(cityPrefix)}${avgTempDay.toFixed(
     1
-  )}°C, обл. ${Math.round(avgCloud)}%, осадки ${precipitationLabel}</span>`;
+  )}°C днем</span>`;
 }
 
 function pickDominantWeatherCode(list) {

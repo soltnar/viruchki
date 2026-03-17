@@ -7,11 +7,27 @@ const state = {
   compareOptions: [],
   chartMeta: null,
   loadedFiles: [],
-  exclusionRules: []
+  exclusionRules: [],
+  weatherByCityDate: { nn: {}, dzer: {} },
+  weatherLoading: false,
+  weatherError: "",
+  weatherRequestSeq: 0
 };
 
+const APP_VERSION = "2026-03-17.56";
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
+const WEATHER_TIMEZONE = "Europe/Moscow";
+const WEATHER_LOCATIONS = {
+  nn: { label: "Нижний Новгород", short: "НН", latitude: 56.3269, longitude: 44.0059 },
+  dzer: { label: "Дзержинск", short: "Дз", latitude: 56.2441, longitude: 43.4630 }
+};
+const DZER_GROUP_PATTERNS = [
+  "циолковского 19а",
+  "каспарус",
+  "ударник",
+  "ленина 64"
+];
 const DEFAULT_EXCLUSION_RULES = [
   "Онлайн оплата, СБП",
   "Основной склад",
@@ -194,7 +210,7 @@ function appendDebugLog(level, event, data) {
 }
 
 function initDebugLogging() {
-  appendDebugLog("info", "app_start", { version: "2026-03-10.48" });
+  appendDebugLog("info", "app_start", { version: APP_VERSION });
   window.addEventListener("error", (evt) => {
     appendDebugLog("error", "window_error", {
       message: evt.message || "unknown_window_error",
@@ -218,7 +234,7 @@ function downloadDebugLog() {
     list = [];
   }
   const payload = {
-    appVersion: "2026-03-10.55",
+    appVersion: APP_VERSION,
     exportedAt: new Date().toISOString(),
     logs: list
   };
@@ -967,6 +983,7 @@ function applyFilters() {
 
   renderStats(state.filteredRows);
   renderComparison(baseRows, from, to);
+  updateWeatherForRows(state.filteredRows);
   renderDateTotals(state.filteredRows);
   renderTable(state.filteredRows);
   renderChart(baseRows, from, to);
@@ -1243,6 +1260,132 @@ function normalizeFilterDate(value) {
   return raw;
 }
 
+function updateWeatherForRows(rows) {
+  const dates = [...new Set(rows.map((r) => r.date).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ""))))].sort(
+    (a, b) => a.localeCompare(b)
+  );
+  if (!dates.length) {
+    state.weatherLoading = false;
+    state.weatherError = "";
+    return;
+  }
+  const cities = [...new Set(rows.map((r) => resolveWeatherCityByGroup(r.group)))];
+  const missingCities = cities.filter((city) => !hasWeatherCoverage(city, dates));
+  if (!missingCities.length) {
+    state.weatherLoading = false;
+    state.weatherError = "";
+    return;
+  }
+
+  state.weatherLoading = true;
+  state.weatherError = "";
+  const requestId = (state.weatherRequestSeq || 0) + 1;
+  state.weatherRequestSeq = requestId;
+  const from = dates[0];
+  const to = dates[dates.length - 1];
+  appendDebugLog("info", "weather_fetch_start", { cities: missingCities, from, to });
+
+  Promise.all(missingCities.map((city) => fetchWeatherForCityRange(city, from, to)))
+    .then(() => {
+      if (state.weatherRequestSeq !== requestId) return;
+      state.weatherLoading = false;
+      state.weatherError = "";
+      appendDebugLog("info", "weather_fetch_ok", { cities: missingCities, from, to });
+      renderDateTotals(state.filteredRows);
+    })
+    .catch((error) => {
+      if (state.weatherRequestSeq !== requestId) return;
+      state.weatherLoading = false;
+      state.weatherError = "погода недоступна";
+      appendDebugLog("warn", "weather_fetch_failed", {
+        message: error && error.message ? error.message : "weather_unknown_error",
+        cities: missingCities,
+        from,
+        to
+      });
+      renderDateTotals(state.filteredRows);
+    });
+}
+
+function hasWeatherCoverage(cityCode, dates) {
+  const cityData = state.weatherByCityDate[cityCode] || {};
+  for (let i = 0; i < dates.length; i += 1) {
+    if (!cityData[dates[i]]) return false;
+  }
+  return true;
+}
+
+async function fetchWeatherForCityRange(cityCode, from, to) {
+  const location = WEATHER_LOCATIONS[cityCode];
+  if (!location) return;
+
+  const todayIso = dateToIso(new Date());
+  const ranges = [];
+  if (from <= todayIso) ranges.push({ type: "archive", from, to: to < todayIso ? to : todayIso });
+  if (to > todayIso) ranges.push({ type: "forecast", from: from > todayIso ? from : addDaysIso(todayIso, 1), to });
+
+  for (let i = 0; i < ranges.length; i += 1) {
+    const range = ranges[i];
+    if (range.from > range.to) continue;
+    const endpoint =
+      range.type === "archive"
+        ? "https://archive-api.open-meteo.com/v1/archive"
+        : "https://api.open-meteo.com/v1/forecast";
+    const params = new URLSearchParams({
+      latitude: String(location.latitude),
+      longitude: String(location.longitude),
+      daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,cloud_cover_mean",
+      timezone: WEATHER_TIMEZONE,
+      start_date: range.from,
+      end_date: range.to
+    });
+    const response = await fetch(`${endpoint}?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`weather_http_${response.status}`);
+    }
+    const data = await response.json();
+    const parsed = parseWeatherDailyPayload(data);
+    const cityData = state.weatherByCityDate[cityCode] || {};
+    Object.keys(parsed).forEach((date) => {
+      cityData[date] = parsed[date];
+    });
+    state.weatherByCityDate[cityCode] = cityData;
+  }
+}
+
+function parseWeatherDailyPayload(payload) {
+  const daily = payload && payload.daily ? payload.daily : null;
+  if (!daily || !Array.isArray(daily.time)) return {};
+  const out = {};
+  for (let i = 0; i < daily.time.length; i += 1) {
+    const date = daily.time[i];
+    if (!date) continue;
+    const tMax = Number(daily.temperature_2m_max && daily.temperature_2m_max[i]);
+    const tMin = Number(daily.temperature_2m_min && daily.temperature_2m_min[i]);
+    const tempAvg =
+      Number.isFinite(tMax) && Number.isFinite(tMin)
+        ? (tMax + tMin) / 2
+        : Number.isFinite(tMax)
+          ? tMax
+          : Number.isFinite(tMin)
+            ? tMin
+            : 0;
+    out[date] = {
+      weatherCode: Number(daily.weather_code && daily.weather_code[i]) || 0,
+      tempAvg,
+      cloud: Number(daily.cloud_cover_mean && daily.cloud_cover_mean[i]) || 0,
+      precip: Number(daily.precipitation_sum && daily.precipitation_sum[i]) || 0
+    };
+  }
+  return out;
+}
+
+function addDaysIso(iso, days) {
+  const date = isoToDate(iso);
+  if (!date) return iso;
+  return dateToIso(addDays(date, days));
+}
+
 function renderStats(rows) {
   const total = rows.reduce((sum, r) => sum + r.revenue, 0);
   const restaurants = new Set(rows.map((r) => r.group)).size;
@@ -1312,14 +1455,18 @@ function renderDateTotals(rows) {
   rows.forEach((row) => {
     if (row.date === "Без даты") return;
     const period = getPeriodInfo(row.date, groupBy);
-    const bucket = byPeriod.get(period.key) || { label: period.label, sortDate: period.sortDate, total: 0 };
+    const bucket =
+      byPeriod.get(period.key) ||
+      { label: period.label, sortDate: period.sortDate, total: 0, dates: new Set(), cities: new Set() };
     bucket.total += row.revenue;
+    bucket.dates.add(row.date);
+    bucket.cities.add(resolveWeatherCityByGroup(row.group));
     byPeriod.set(period.key, bucket);
   });
 
   const periods = Array.from(byPeriod.values()).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
   if (!periods.length) {
-    els.dateTotalsBody.innerHTML = '<tr><td class="empty" colspan="2">Нет данных по датам</td></tr>';
+    els.dateTotalsBody.innerHTML = '<tr><td class="empty" colspan="3">Нет данных по датам</td></tr>';
     return;
   }
 
@@ -1329,10 +1476,112 @@ function renderDateTotals(rows) {
       <tr>
         <td>${escapeHtml(period.label)}</td>
         <td class="money">${formatMoney(period.total)}</td>
+        <td class="weather-cell">${buildWeatherCellHtml(period)}</td>
       </tr>
     `
     )
     .join("");
+}
+
+function resolveWeatherCityByGroup(groupName) {
+  const key = normalizeNameKey(groupName);
+  return DZER_GROUP_PATTERNS.some((p) => key.includes(p)) ? "dzer" : "nn";
+}
+
+function buildWeatherCellHtml(period) {
+  const dates = Array.from(period.dates || []).sort((a, b) => a.localeCompare(b));
+  const cities = Array.from(period.cities || []);
+  if (!dates.length || !cities.length) return '<span class="weather-muted">н/д</span>';
+  if (state.weatherLoading) return '<span class="weather-muted">загрузка...</span>';
+  if (state.weatherError) return `<span class="weather-muted">${escapeHtml(state.weatherError)}</span>`;
+
+  const chunks = cities.map((cityCode) => {
+    const cityData = state.weatherByCityDate[cityCode] || {};
+    const list = dates.map((date) => cityData[date]).filter(Boolean);
+    if (!list.length) return `${WEATHER_LOCATIONS[cityCode].short}: н/д`;
+    return formatWeatherSummary(list, cityCode, cities.length > 1);
+  });
+  return chunks.join('<br/>');
+}
+
+function formatWeatherSummary(list, cityCode, includeCityLabel) {
+  const avgTemp =
+    list.reduce((sum, item) => sum + (Number(item.tempAvg) || 0), 0) / Math.max(1, list.length);
+  const avgCloud =
+    list.reduce((sum, item) => sum + (Number(item.cloud) || 0), 0) / Math.max(1, list.length);
+  const precip = list.reduce((sum, item) => sum + (Number(item.precip) || 0), 0);
+  const weatherCode = pickDominantWeatherCode(list);
+  const emoji = getWeatherEmoji(weatherCode);
+  const label = getWeatherLabel(weatherCode);
+  const cityPrefix = includeCityLabel ? `${WEATHER_LOCATIONS[cityCode].short}: ` : "";
+  const precipitationLabel = `${precip.toFixed(1)} мм`;
+  return `<span class="weather-line" title="${escapeHtml(label)}">${emoji} ${escapeHtml(cityPrefix)}${avgTemp.toFixed(
+    1
+  )}°C, обл. ${Math.round(avgCloud)}%, осадки ${precipitationLabel}</span>`;
+}
+
+function pickDominantWeatherCode(list) {
+  const weighted = new Map();
+  list.forEach((item) => {
+    const code = Number(item.weatherCode) || 0;
+    const score = 1 + Math.max(0, Number(item.precip) || 0) + Math.max(0, Number(item.cloud) || 0) / 100;
+    weighted.set(code, (weighted.get(code) || 0) + score);
+  });
+  let bestCode = 0;
+  let bestScore = -1;
+  weighted.forEach((score, code) => {
+    if (score > bestScore) {
+      bestScore = score;
+      bestCode = code;
+    }
+  });
+  return bestCode;
+}
+
+function getWeatherEmoji(code) {
+  if (code === 0) return "☀️";
+  if (code === 1 || code === 2) return "🌤️";
+  if (code === 3) return "☁️";
+  if (code === 45 || code === 48) return "🌫️";
+  if ([51, 53, 55, 56, 57].includes(code)) return "🌦️";
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "🌧️";
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return "🌨️";
+  if (code >= 95) return "⛈️";
+  return "🌡️";
+}
+
+function getWeatherLabel(code) {
+  const labels = {
+    0: "Ясно",
+    1: "Преимущественно ясно",
+    2: "Переменная облачность",
+    3: "Пасмурно",
+    45: "Туман",
+    48: "Изморозь",
+    51: "Слабая морось",
+    53: "Морось",
+    55: "Сильная морось",
+    56: "Ледяная морось",
+    57: "Сильная ледяная морось",
+    61: "Слабый дождь",
+    63: "Дождь",
+    65: "Сильный дождь",
+    66: "Ледяной дождь",
+    67: "Сильный ледяной дождь",
+    71: "Слабый снег",
+    73: "Снег",
+    75: "Сильный снег",
+    77: "Снежные зерна",
+    80: "Ливневый дождь",
+    81: "Ливень",
+    82: "Сильный ливень",
+    85: "Снегопад",
+    86: "Сильный снегопад",
+    95: "Гроза",
+    96: "Гроза с градом",
+    99: "Сильная гроза с градом"
+  };
+  return labels[code] || "Погодные условия";
 }
 
 function onTableClick(event) {

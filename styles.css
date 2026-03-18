@@ -144,7 +144,7 @@ body {
   font-size: 0.95rem;
 }
 
-#seasonalityDetails:not([open]) .collapsible-summary::before {
+.panel details:not([open]) > .collapsible-summary::before {
   content: "▸";
 }
 

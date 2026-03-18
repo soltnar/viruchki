@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-18.64";
+const APP_VERSION = "2026-03-18.65";
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
@@ -1183,13 +1183,18 @@ function renderForecast(rows) {
     const iso = dateToIso(d);
     const weekday = (d.getDay() + 6) % 7;
     const month = d.getMonth();
+    const dayInfo = getSpecialDayInfo(iso);
+    const dayType = dayInfo.holiday ? "holiday" : dayInfo.weekend ? "weekend" : "workday";
     const weekdayIndex = profile.weekdayIndex.get(weekday) || 1;
     const monthIndex = profile.monthIndex.get(month) || 1;
+    const dayTypeIndex = profile.dayTypeIndex.get(dayType) || 1;
     const trendIndex = profile.trendIndex || 1;
-    const predicted = round2(Math.max(0, profile.baseAvg * weekdayIndex * monthIndex * trendIndex));
+    const combinedIndex = clampNumber(weekdayIndex * monthIndex * dayTypeIndex * trendIndex, 0.7, 1.3);
+    const predicted = round2(Math.max(0, profile.baseAvg * combinedIndex));
     forecastRows.push({
       date: iso,
       weekday,
+      dayType,
       revenue: predicted
     });
   }
@@ -1209,13 +1214,13 @@ function renderForecast(rows) {
     <article class="stat">
       <p class="stat-title">Прогноз: среднее в день</p>
       <p class="stat-value">${formatMoney(avg)}</p>
-      <p class="stat-meta">Модель: день недели + месяц + тренд</p>
+      <p class="stat-meta">Модель: день недели + месяц + тип дня + тренд (с ограничением оптимизма)</p>
     </article>
   `;
 
   els.forecastBody.innerHTML = forecastRows
     .map((row) => {
-      const weekendCls = row.weekday >= 5 ? "weekend-row" : "";
+      const weekendCls = row.dayType === "holiday" ? "holiday-row" : row.weekday >= 5 ? "weekend-row" : "";
       return `<tr class="${weekendCls}"><td>${formatDate(row.date)}</td><td>${WEEKDAY_NAMES[row.weekday]}</td><td class="money">${formatMoney(
         row.revenue
       )}</td></tr>`;
@@ -1228,12 +1233,15 @@ function buildForecastProfile(historyDailyRows) {
     historyDailyRows.reduce((sum, row) => sum + row.revenue, 0) / Math.max(1, historyDailyRows.length);
   const weekdayAgg = new Map();
   const monthAgg = new Map();
+  const dayTypeAgg = new Map();
 
   historyDailyRows.forEach((row) => {
     const d = isoToDate(row.date);
     if (!d) return;
     const weekday = (d.getDay() + 6) % 7;
     const month = d.getMonth();
+    const dayInfo = getSpecialDayInfo(row.date);
+    const dayType = dayInfo.holiday ? "holiday" : dayInfo.weekend ? "weekend" : "workday";
     const w = weekdayAgg.get(weekday) || { total: 0, count: 0 };
     w.total += row.revenue;
     w.count += 1;
@@ -1242,21 +1250,40 @@ function buildForecastProfile(historyDailyRows) {
     m.total += row.revenue;
     m.count += 1;
     monthAgg.set(month, m);
+    const dt = dayTypeAgg.get(dayType) || { total: 0, count: 0 };
+    dt.total += row.revenue;
+    dt.count += 1;
+    dayTypeAgg.set(dayType, dt);
   });
 
   const weekdayIndex = new Map();
   weekdayAgg.forEach((v, k) => {
     const avg = v.total / Math.max(1, v.count);
-    weekdayIndex.set(k, baseAvg > 0 ? avg / baseAvg : 1);
+    const rawIdx = baseAvg > 0 ? avg / baseAvg : 1;
+    const reliability = Math.min(1, v.count / 10);
+    weekdayIndex.set(k, clampNumber(1 + (rawIdx - 1) * reliability, 0.85, 1.15));
   });
   const monthIndex = new Map();
   monthAgg.forEach((v, k) => {
     const avg = v.total / Math.max(1, v.count);
-    monthIndex.set(k, baseAvg > 0 ? avg / baseAvg : 1);
+    const rawIdx = baseAvg > 0 ? avg / baseAvg : 1;
+    const reliability = Math.min(1, v.count / 12);
+    monthIndex.set(k, clampNumber(1 + (rawIdx - 1) * reliability, 0.88, 1.12));
+  });
+  const dayTypeIndex = new Map([
+    ["workday", 1],
+    ["weekend", 1],
+    ["holiday", 0.95]
+  ]);
+  dayTypeAgg.forEach((v, k) => {
+    const avg = v.total / Math.max(1, v.count);
+    const rawIdx = baseAvg > 0 ? avg / baseAvg : 1;
+    const reliability = Math.min(1, v.count / 20);
+    dayTypeIndex.set(k, clampNumber(1 + (rawIdx - 1) * reliability, 0.85, 1.1));
   });
 
   const trendIndex = calcTrendIndex(historyDailyRows);
-  return { baseAvg, weekdayIndex, monthIndex, trendIndex };
+  return { baseAvg, weekdayIndex, monthIndex, dayTypeIndex, trendIndex };
 }
 
 function calcTrendIndex(historyDailyRows) {
@@ -1269,7 +1296,12 @@ function calcTrendIndex(historyDailyRows) {
   const previousAvg = previous.reduce((s, r) => s + r.revenue, 0) / previous.length;
   if (previousAvg <= 0) return 1;
   const ratio = recentAvg / previousAvg;
-  return Math.max(0.75, Math.min(1.25, ratio));
+  return clampNumber(ratio, 0.9, 1.1);
+}
+
+function clampNumber(value, min, max) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
 }
 
 function toggleCompareCustom() {

@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-17.60";
+const APP_VERSION = "2026-03-18.62";
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
 const WEATHER_IMPACT_TOGGLE_KEY = "revenue_show_weather_impact_v1";
@@ -2627,10 +2627,29 @@ function exportChartToPng() {
 }
 
 function updatePrintModeFlags() {
+  const rowsInRange = getRowsForCurrentDateRange(state.filteredRows || []);
+  const uniqueDaysInRange = getUniqueDatedDayCount(rowsInRange);
   document.body.classList.toggle("print-hide-comparison", !isComparisonEnabled());
-  const weatherSeries = buildWeatherRevenueSeries(state.filteredRows || []);
-  const hideWeatherForPrint = !state.showWeatherImpact || state.weatherLoading || weatherSeries.length < 3;
+  const weatherSeries = buildWeatherRevenueSeries(rowsInRange);
+  const hideWeatherForPrint =
+    !state.showWeatherImpact || state.weatherLoading || uniqueDaysInRange < 3 || weatherSeries.length < 3;
   document.body.classList.toggle("print-hide-weather-impact", hideWeatherForPrint);
+  document.body.classList.toggle("print-hide-seasonality", uniqueDaysInRange < 2);
+}
+
+function getRowsForCurrentDateRange(rows) {
+  const from = normalizeFilterDate(els.dateFrom && els.dateFrom.value);
+  const to = normalizeFilterDate(els.dateTo && els.dateTo.value);
+  return (rows || []).filter((row) => {
+    if (!row || !row.date || row.date === "Без даты") return false;
+    if (from && row.date < from) return false;
+    if (to && row.date > to) return false;
+    return true;
+  });
+}
+
+function getUniqueDatedDayCount(rows) {
+  return new Set((rows || []).map((r) => r.date).filter((d) => d && d !== "Без даты")).size;
 }
 
 function formatMoneyCompact(value) {
@@ -2668,6 +2687,7 @@ window.addEventListener("beforeprint", updatePrintModeFlags);
 window.addEventListener("afterprint", () => {
   document.body.classList.remove("print-hide-comparison");
   document.body.classList.remove("print-hide-weather-impact");
+  document.body.classList.remove("print-hide-seasonality");
 });
 
 window.addEventListener("resize", () => {

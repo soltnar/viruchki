@@ -809,6 +809,10 @@ body.weather-impact-off .weather-col {
     display: none !important;
   }
 
+  .print-hide-seasonality #seasonalitySection {
+    display: none !important;
+  }
+
   .weather-impact-off #weatherImpactSection {
     display: none !important;
   }

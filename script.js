@@ -2628,6 +2628,9 @@ function exportChartToPng() {
 
 function updatePrintModeFlags() {
   document.body.classList.toggle("print-hide-comparison", !isComparisonEnabled());
+  const weatherSeries = buildWeatherRevenueSeries(state.filteredRows || []);
+  const hideWeatherForPrint = !state.showWeatherImpact || state.weatherLoading || weatherSeries.length < 3;
+  document.body.classList.toggle("print-hide-weather-impact", hideWeatherForPrint);
 }
 
 function formatMoneyCompact(value) {
@@ -2664,6 +2667,7 @@ function formatDateForFileName(isoDate) {
 window.addEventListener("beforeprint", updatePrintModeFlags);
 window.addEventListener("afterprint", () => {
   document.body.classList.remove("print-hide-comparison");
+  document.body.classList.remove("print-hide-weather-impact");
 });
 
 window.addEventListener("resize", () => {

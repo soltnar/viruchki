@@ -805,6 +805,10 @@ body.weather-impact-off .weather-col {
     display: none !important;
   }
 
+  .print-hide-weather-impact #weatherImpactSection {
+    display: none !important;
+  }
+
   .weather-impact-off #weatherImpactSection {
     display: none !important;
   }

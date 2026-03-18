@@ -506,6 +506,17 @@ h2 {
   color: #5d6a61;
 }
 
+.seasonality-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.seasonality-grid h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
 .table-wrap {
   max-height: 460px;
   overflow: auto;
@@ -707,6 +718,10 @@ body.weather-impact-off .weather-col {
 
   .chart-controls .table-toggle {
     width: 100%;
+  }
+
+  .seasonality-grid {
+    grid-template-columns: 1fr;
   }
 
   .weather-col,

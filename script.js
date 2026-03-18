@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-17.59";
+const APP_VERSION = "2026-03-17.60";
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
 const WEATHER_IMPACT_TOGGLE_KEY = "revenue_show_weather_impact_v1";
@@ -95,6 +95,10 @@ const els = {
   weatherImpactSection: document.getElementById("weatherImpactSection"),
   weatherImpactStats: document.getElementById("weatherImpactStats"),
   showWeatherImpact: document.getElementById("showWeatherImpact"),
+  seasonalitySection: document.getElementById("seasonalitySection"),
+  seasonalityStats: document.getElementById("seasonalityStats"),
+  seasonMonthBody: document.getElementById("seasonMonthBody"),
+  seasonWeekdayBody: document.getElementById("seasonWeekdayBody"),
   chart: document.getElementById("chart"),
   chartTooltip: document.getElementById("chartTooltip"),
   exclusionsDetails: document.getElementById("exclusionsDetails"),
@@ -1036,9 +1040,95 @@ function applyFilters() {
   renderComparison(baseRows, from, to);
   updateWeatherForRows(state.filteredRows);
   renderWeatherImpact(state.filteredRows);
+  renderSeasonality(state.filteredRows);
   renderDateTotals(state.filteredRows);
   renderTable(state.filteredRows);
   renderChart(baseRows, from, to);
+}
+
+function renderSeasonality(rows) {
+  if (!els.seasonalitySection || !els.seasonalityStats || !els.seasonMonthBody || !els.seasonWeekdayBody) return;
+  const datedRows = rows.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(String(r.date || "")));
+  if (!datedRows.length) {
+    els.seasonalityStats.innerHTML = '<article class="stat"><p class="stat-title">Сезонность</p><p class="stat-value">Нет данных</p></article>';
+    els.seasonMonthBody.innerHTML = '<tr><td class="empty" colspan="3">Нет данных</td></tr>';
+    els.seasonWeekdayBody.innerHTML = '<tr><td class="empty" colspan="3">Нет данных</td></tr>';
+    return;
+  }
+
+  const revenueByDate = new Map();
+  datedRows.forEach((row) => {
+    revenueByDate.set(row.date, (revenueByDate.get(row.date) || 0) + row.revenue);
+  });
+  const dailySeries = Array.from(revenueByDate.entries()).map(([date, revenue]) => ({ date, revenue }));
+  const overallAvg = dailySeries.reduce((s, d) => s + d.revenue, 0) / Math.max(1, dailySeries.length);
+
+  const monthNames = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
+  const monthMap = new Map();
+  const weekdayMap = new Map();
+  dailySeries.forEach((d) => {
+    const dt = isoToDate(d.date);
+    if (!dt) return;
+    const m = dt.getMonth();
+    const wd = (dt.getDay() + 6) % 7;
+    const monthBucket = monthMap.get(m) || { month: m, total: 0, days: 0 };
+    monthBucket.total += d.revenue;
+    monthBucket.days += 1;
+    monthMap.set(m, monthBucket);
+    const weekdayBucket = weekdayMap.get(wd) || { weekday: wd, total: 0, days: 0 };
+    weekdayBucket.total += d.revenue;
+    weekdayBucket.days += 1;
+    weekdayMap.set(wd, weekdayBucket);
+  });
+
+  const monthRows = Array.from(monthMap.values())
+    .sort((a, b) => a.month - b.month)
+    .map((m) => {
+      const avg = m.total / Math.max(1, m.days);
+      const idx = overallAvg > 0 ? (avg / overallAvg) * 100 : 0;
+      return `<tr><td>${monthNames[m.month]}</td><td class="money">${formatMoney(avg)}</td><td>${Math.round(idx)}%</td></tr>`;
+    })
+    .join("");
+  els.seasonMonthBody.innerHTML = monthRows || '<tr><td class="empty" colspan="3">Нет данных</td></tr>';
+
+  const weekdayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const weekdayRows = Array.from(weekdayMap.values())
+    .sort((a, b) => a.weekday - b.weekday)
+    .map((w) => {
+      const avg = w.total / Math.max(1, w.days);
+      const idx = overallAvg > 0 ? (avg / overallAvg) * 100 : 0;
+      const weekendCls = w.weekday >= 5 ? "weekend-row" : "";
+      return `<tr class="${weekendCls}"><td>${weekdayNames[w.weekday]}</td><td class="money">${formatMoney(avg)}</td><td>${Math.round(
+        idx
+      )}%</td></tr>`;
+    })
+    .join("");
+  els.seasonWeekdayBody.innerHTML = weekdayRows || '<tr><td class="empty" colspan="3">Нет данных</td></tr>';
+
+  const bestMonth = Array.from(monthMap.values()).sort((a, b) => b.total / b.days - a.total / a.days)[0];
+  const worstMonth = Array.from(monthMap.values()).sort((a, b) => a.total / a.days - b.total / b.days)[0];
+  const bestWeekday = Array.from(weekdayMap.values()).sort((a, b) => b.total / b.days - a.total / a.days)[0];
+  els.seasonalityStats.innerHTML = `
+    <article class="stat">
+      <p class="stat-title">Средняя выручка в день</p>
+      <p class="stat-value">${formatMoney(overallAvg)}</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Сильный месяц</p>
+      <p class="stat-value">${monthNames[bestMonth.month]}</p>
+      <p class="stat-meta">${formatMoney(bestMonth.total / bestMonth.days)} в день</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Слабый месяц</p>
+      <p class="stat-value">${monthNames[worstMonth.month]}</p>
+      <p class="stat-meta">${formatMoney(worstMonth.total / worstMonth.days)} в день</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Сильный день недели</p>
+      <p class="stat-value">${weekdayNames[bestWeekday.weekday]}</p>
+      <p class="stat-meta">${formatMoney(bestWeekday.total / bestWeekday.days)} в день</p>
+    </article>
+  `;
 }
 
 function toggleCompareCustom() {

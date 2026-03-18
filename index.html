@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260318-62" />
+    <link rel="stylesheet" href="./styles.css?v=20260318-63" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
@@ -20,7 +20,7 @@
           Загрузите один или несколько Excel-файлов. Сайт соберет данные по датам и ресторанам,
           покажет динамику и итоговую таблицу.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-03-18.62</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-03-18.63</span></p>
       </header>
 
       <section class="panel upload-panel">
@@ -93,40 +93,78 @@
       </section>
 
       <section class="panel" id="seasonalitySection">
-        <h2>Сезонность</h2>
-        <p class="hint">Анализ зависимости выручки от месяца и дня недели (рабочее окно 10:00-23:00).</p>
-        <div class="stats" id="seasonalityStats"></div>
-        <div class="seasonality-grid">
-          <div>
-            <h3>По месяцам</h3>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Месяц</th>
-                    <th>Среднее/день</th>
-                    <th>Индекс</th>
-                  </tr>
-                </thead>
-                <tbody id="seasonMonthBody"></tbody>
-              </table>
+        <details id="seasonalityDetails" open>
+          <summary class="collapsible-summary">
+            <h2>Сезонность</h2>
+          </summary>
+          <div class="collapsible-content">
+            <p class="hint">Анализ зависимости выручки от месяца и дня недели (рабочее окно 10:00-23:00).</p>
+            <div class="stats" id="seasonalityStats"></div>
+            <div class="seasonality-grid">
+              <div>
+                <h3>По месяцам</h3>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Месяц</th>
+                        <th>Среднее/день</th>
+                        <th>Индекс</th>
+                      </tr>
+                    </thead>
+                    <tbody id="seasonMonthBody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <h3>По дням недели</h3>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>День</th>
+                        <th>Среднее/день</th>
+                        <th>Индекс</th>
+                      </tr>
+                    </thead>
+                    <tbody id="seasonWeekdayBody"></tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
-          <div>
-            <h3>По дням недели</h3>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>День</th>
-                    <th>Среднее/день</th>
-                    <th>Индекс</th>
-                  </tr>
-                </thead>
-                <tbody id="seasonWeekdayBody"></tbody>
-              </table>
-            </div>
+        </details>
+      </section>
+
+      <section class="panel" id="forecastSection">
+        <h2>Прогноз выручки</h2>
+        <p class="hint">Прогноз строится на базе текущей выборки: средний день + поправка на день недели и месяц.</p>
+        <div class="filters forecast-filters">
+          <div class="filter-group">
+            <label for="forecastFrom">Период прогноза: с даты</label>
+            <input id="forecastFrom" type="date" />
           </div>
+          <div class="filter-group">
+            <label for="forecastTo">Период прогноза: по дату</label>
+            <input id="forecastTo" type="date" />
+          </div>
+          <div class="filter-group">
+            <label>&nbsp;</label>
+            <button id="buildForecast" type="button">Построить прогноз</button>
+          </div>
+        </div>
+        <div class="stats" id="forecastStats"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>День недели</th>
+                <th>Прогноз выручки</th>
+              </tr>
+            </thead>
+            <tbody id="forecastBody"></tbody>
+          </table>
         </div>
       </section>
 
@@ -266,6 +304,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./script.js?v=20260318-62"></script>
+    <script src="./script.js?v=20260318-63"></script>
   </body>
 </html>

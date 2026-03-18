@@ -15,7 +15,8 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-18.62";
+const APP_VERSION = "2026-03-18.63";
+const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
 const WEATHER_IMPACT_TOGGLE_KEY = "revenue_show_weather_impact_v1";
@@ -96,9 +97,16 @@ const els = {
   weatherImpactStats: document.getElementById("weatherImpactStats"),
   showWeatherImpact: document.getElementById("showWeatherImpact"),
   seasonalitySection: document.getElementById("seasonalitySection"),
+  seasonalityDetails: document.getElementById("seasonalityDetails"),
   seasonalityStats: document.getElementById("seasonalityStats"),
   seasonMonthBody: document.getElementById("seasonMonthBody"),
   seasonWeekdayBody: document.getElementById("seasonWeekdayBody"),
+  forecastSection: document.getElementById("forecastSection"),
+  forecastFrom: document.getElementById("forecastFrom"),
+  forecastTo: document.getElementById("forecastTo"),
+  buildForecast: document.getElementById("buildForecast"),
+  forecastStats: document.getElementById("forecastStats"),
+  forecastBody: document.getElementById("forecastBody"),
   chart: document.getElementById("chart"),
   chartTooltip: document.getElementById("chartTooltip"),
   exclusionsDetails: document.getElementById("exclusionsDetails"),
@@ -175,6 +183,9 @@ els.chart.addEventListener("mouseleave", hideChartTooltip);
 els.chart.addEventListener("touchstart", onChartPointerMove, { passive: true });
 els.chart.addEventListener("touchmove", onChartPointerMove, { passive: true });
 els.chart.addEventListener("touchend", hideChartTooltip);
+if (els.forecastFrom) els.forecastFrom.addEventListener("change", () => renderForecast(state.filteredRows));
+if (els.forecastTo) els.forecastTo.addEventListener("change", () => renderForecast(state.filteredRows));
+if (els.buildForecast) els.buildForecast.addEventListener("click", () => renderForecast(state.filteredRows));
 toggleCompareCustom();
 updateComparisonUI();
 updateWarehouseActionButtons();
@@ -1041,6 +1052,7 @@ function applyFilters() {
   updateWeatherForRows(state.filteredRows);
   renderWeatherImpact(state.filteredRows);
   renderSeasonality(state.filteredRows);
+  renderForecast(state.filteredRows);
   renderDateTotals(state.filteredRows);
   renderTable(state.filteredRows);
   renderChart(baseRows, from, to);
@@ -1091,14 +1103,13 @@ function renderSeasonality(rows) {
     .join("");
   els.seasonMonthBody.innerHTML = monthRows || '<tr><td class="empty" colspan="3">Нет данных</td></tr>';
 
-  const weekdayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
   const weekdayRows = Array.from(weekdayMap.values())
     .sort((a, b) => a.weekday - b.weekday)
     .map((w) => {
       const avg = w.total / Math.max(1, w.days);
       const idx = overallAvg > 0 ? (avg / overallAvg) * 100 : 0;
       const weekendCls = w.weekday >= 5 ? "weekend-row" : "";
-      return `<tr class="${weekendCls}"><td>${weekdayNames[w.weekday]}</td><td class="money">${formatMoney(avg)}</td><td>${Math.round(
+      return `<tr class="${weekendCls}"><td>${WEEKDAY_NAMES[w.weekday]}</td><td class="money">${formatMoney(avg)}</td><td>${Math.round(
         idx
       )}%</td></tr>`;
     })
@@ -1125,10 +1136,140 @@ function renderSeasonality(rows) {
     </article>
     <article class="stat">
       <p class="stat-title">Сильный день недели</p>
-      <p class="stat-value">${weekdayNames[bestWeekday.weekday]}</p>
+      <p class="stat-value">${WEEKDAY_NAMES[bestWeekday.weekday]}</p>
       <p class="stat-meta">${formatMoney(bestWeekday.total / bestWeekday.days)} в день</p>
     </article>
   `;
+}
+
+function renderForecast(rows) {
+  if (!els.forecastSection || !els.forecastStats || !els.forecastBody) return;
+  const datedRows = rows.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(String(r.date || "")));
+  if (!datedRows.length) {
+    els.forecastStats.innerHTML =
+      '<article class="stat"><p class="stat-title">Прогноз</p><p class="stat-value">Нет данных</p><p class="stat-meta">Загрузите выручку за прошлые дни.</p></article>';
+    els.forecastBody.innerHTML = '<tr><td class="empty" colspan="3">Нет данных для прогноза</td></tr>';
+    return;
+  }
+
+  const dailyMap = new Map();
+  datedRows.forEach((row) => {
+    dailyMap.set(row.date, (dailyMap.get(row.date) || 0) + row.revenue);
+  });
+  const history = Array.from(dailyMap.entries())
+    .map(([date, revenue]) => ({ date, revenue }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const profile = buildForecastProfile(history);
+
+  const maxHistoryDate = history[history.length - 1].date;
+  const defaultFrom = dateToIso(addDays(isoToDate(maxHistoryDate), 1));
+  const defaultTo = dateToIso(addDays(isoToDate(maxHistoryDate), 7));
+  if (els.forecastFrom && !normalizeFilterDate(els.forecastFrom.value)) els.forecastFrom.value = defaultFrom;
+  if (els.forecastTo && !normalizeFilterDate(els.forecastTo.value)) els.forecastTo.value = defaultTo;
+
+  const from = normalizeFilterDate(els.forecastFrom && els.forecastFrom.value);
+  const to = normalizeFilterDate(els.forecastTo && els.forecastTo.value);
+  const fromDate = isoToDate(from);
+  const toDate = isoToDate(to);
+  if (!fromDate || !toDate || from > to) {
+    els.forecastStats.innerHTML =
+      '<article class="stat"><p class="stat-title">Прогноз</p><p class="stat-value">Проверьте даты</p><p class="stat-meta">Укажите корректный диапазон прогноза.</p></article>';
+    els.forecastBody.innerHTML = '<tr><td class="empty" colspan="3">Некорректный диапазон дат</td></tr>';
+    return;
+  }
+
+  const forecastRows = [];
+  for (let d = new Date(fromDate); d <= toDate; d = addDays(d, 1)) {
+    const iso = dateToIso(d);
+    const weekday = (d.getDay() + 6) % 7;
+    const month = d.getMonth();
+    const weekdayIndex = profile.weekdayIndex.get(weekday) || 1;
+    const monthIndex = profile.monthIndex.get(month) || 1;
+    const trendIndex = profile.trendIndex || 1;
+    const predicted = round2(Math.max(0, profile.baseAvg * weekdayIndex * monthIndex * trendIndex));
+    forecastRows.push({
+      date: iso,
+      weekday,
+      revenue: predicted
+    });
+  }
+
+  const total = forecastRows.reduce((sum, row) => sum + row.revenue, 0);
+  const avg = total / Math.max(1, forecastRows.length);
+  els.forecastStats.innerHTML = `
+    <article class="stat">
+      <p class="stat-title">Период прогноза</p>
+      <p class="stat-value">${formatDate(from)} - ${formatDate(to)}</p>
+      <p class="stat-meta">${forecastRows.length} дней</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Прогноз: всего</p>
+      <p class="stat-value">${formatMoney(total)}</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Прогноз: среднее в день</p>
+      <p class="stat-value">${formatMoney(avg)}</p>
+      <p class="stat-meta">Модель: день недели + месяц + тренд</p>
+    </article>
+  `;
+
+  els.forecastBody.innerHTML = forecastRows
+    .map((row) => {
+      const weekendCls = row.weekday >= 5 ? "weekend-row" : "";
+      return `<tr class="${weekendCls}"><td>${formatDate(row.date)}</td><td>${WEEKDAY_NAMES[row.weekday]}</td><td class="money">${formatMoney(
+        row.revenue
+      )}</td></tr>`;
+    })
+    .join("");
+}
+
+function buildForecastProfile(historyDailyRows) {
+  const baseAvg =
+    historyDailyRows.reduce((sum, row) => sum + row.revenue, 0) / Math.max(1, historyDailyRows.length);
+  const weekdayAgg = new Map();
+  const monthAgg = new Map();
+
+  historyDailyRows.forEach((row) => {
+    const d = isoToDate(row.date);
+    if (!d) return;
+    const weekday = (d.getDay() + 6) % 7;
+    const month = d.getMonth();
+    const w = weekdayAgg.get(weekday) || { total: 0, count: 0 };
+    w.total += row.revenue;
+    w.count += 1;
+    weekdayAgg.set(weekday, w);
+    const m = monthAgg.get(month) || { total: 0, count: 0 };
+    m.total += row.revenue;
+    m.count += 1;
+    monthAgg.set(month, m);
+  });
+
+  const weekdayIndex = new Map();
+  weekdayAgg.forEach((v, k) => {
+    const avg = v.total / Math.max(1, v.count);
+    weekdayIndex.set(k, baseAvg > 0 ? avg / baseAvg : 1);
+  });
+  const monthIndex = new Map();
+  monthAgg.forEach((v, k) => {
+    const avg = v.total / Math.max(1, v.count);
+    monthIndex.set(k, baseAvg > 0 ? avg / baseAvg : 1);
+  });
+
+  const trendIndex = calcTrendIndex(historyDailyRows);
+  return { baseAvg, weekdayIndex, monthIndex, trendIndex };
+}
+
+function calcTrendIndex(historyDailyRows) {
+  if (historyDailyRows.length < 14) return 1;
+  const sorted = [...historyDailyRows].sort((a, b) => a.date.localeCompare(b.date));
+  const recent = sorted.slice(-14);
+  const previous = sorted.slice(-28, -14);
+  if (!previous.length) return 1;
+  const recentAvg = recent.reduce((s, r) => s + r.revenue, 0) / recent.length;
+  const previousAvg = previous.reduce((s, r) => s + r.revenue, 0) / previous.length;
+  if (previousAvg <= 0) return 1;
+  const ratio = recentAvg / previousAvg;
+  return Math.max(0.75, Math.min(1.25, ratio));
 }
 
 function toggleCompareCustom() {

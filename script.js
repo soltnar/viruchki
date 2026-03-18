@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-18.66";
+const APP_VERSION = "2026-03-18.67";
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
@@ -1182,30 +1182,7 @@ function renderForecast(rows) {
     return;
   }
 
-  const forecastRows = [];
-  for (let d = new Date(fromDate); d <= toDate; d = addDays(d, 1)) {
-    const iso = dateToIso(d);
-    const weekday = (d.getDay() + 6) % 7;
-    const month = d.getMonth();
-    const dayInfo = getSpecialDayInfo(iso);
-    const dayType = dayInfo.holiday ? "holiday" : dayInfo.weekend ? "weekend" : "workday";
-    const weekdayIndex = profile.weekdayIndex.get(weekday) || 1;
-    const monthIndex = profile.monthIndex.get(month) || 1;
-    const dayTypeIndex = profile.dayTypeIndex.get(dayType) || 1;
-    const trendIndex = profile.trendIndex || 1;
-    const combinedIndex = clampNumber(
-      weekdayIndex * monthIndex * dayTypeIndex * trendIndex,
-      cfg.combinedMin,
-      cfg.combinedMax
-    );
-    const predicted = round2(Math.max(0, profile.baseAvg * combinedIndex));
-    forecastRows.push({
-      date: iso,
-      weekday,
-      dayType,
-      revenue: predicted
-    });
-  }
+  const forecastRows = buildForecastRows(history, fromDate, toDate, profile, cfg);
 
   const total = forecastRows.reduce((sum, row) => sum + row.revenue, 0);
   const avg = total / Math.max(1, forecastRows.length);
@@ -1222,7 +1199,7 @@ function renderForecast(rows) {
     <article class="stat">
       <p class="stat-title">Прогноз: среднее в день</p>
       <p class="stat-value">${formatMoney(avg)}</p>
-      <p class="stat-meta">Режим: ${cfg.label}. Модель: день недели + месяц + тип дня + тренд.</p>
+      <p class="stat-meta">Режим: ${cfg.label}. Модель: адаптивный уровень + день недели/месяц + лаг 7 дней.</p>
     </article>
   `;
 
@@ -1291,7 +1268,102 @@ function buildForecastProfile(historyDailyRows, cfg) {
   });
 
   const trendIndex = calcTrendIndex(historyDailyRows, cfg);
-  return { baseAvg, weekdayIndex, monthIndex, dayTypeIndex, trendIndex };
+  const historyByDate = new Map(historyDailyRows.map((row) => [row.date, row.revenue]));
+  return { baseAvg, weekdayIndex, monthIndex, dayTypeIndex, trendIndex, historyByDate };
+}
+
+function buildForecastRows(historyDailyRows, fromDate, toDate, profile, cfg) {
+  const synthetic = [...historyDailyRows].map((r) => ({ ...r }));
+  synthetic.sort((a, b) => a.date.localeCompare(b.date));
+  const forecastRows = [];
+
+  for (let d = new Date(fromDate); d <= toDate; d = addDays(d, 1)) {
+    const iso = dateToIso(d);
+    const weekday = (d.getDay() + 6) % 7;
+    const month = d.getMonth();
+    const dayInfo = getSpecialDayInfo(iso);
+    const dayType = dayInfo.holiday ? "holiday" : dayInfo.weekend ? "weekend" : "workday";
+
+    const adaptiveLevel = calcAdaptiveLevel(synthetic, profile.baseAvg, cfg);
+    const weekdayIndexStatic = profile.weekdayIndex.get(weekday) || 1;
+    const weekdayIndexDyn = calcDynamicWeekdayIndex(synthetic, weekday, adaptiveLevel, cfg);
+    const weekdayIndex = blendValues(weekdayIndexStatic, weekdayIndexDyn, cfg.dynamicWeekdayBlend);
+    const monthIndex = profile.monthIndex.get(month) || 1;
+    const dayTypeIndex = profile.dayTypeIndex.get(dayType) || 1;
+    const trendIndex = profile.trendIndex || 1;
+    const structuralIdx = clampNumber(weekdayIndex * monthIndex * dayTypeIndex * trendIndex, cfg.combinedMin, cfg.combinedMax);
+    let predicted = adaptiveLevel * structuralIdx;
+
+    const lag7Date = dateToIso(addDays(d, -7));
+    const lag7 = getSeriesRevenueByDate(synthetic, lag7Date);
+    if (lag7 != null && lag7 > 0) {
+      predicted = blendValues(predicted, lag7, cfg.weekLagWeight);
+    }
+
+    const yoyDate = dateToIso(addYears(d, -1));
+    const yoy = profile.historyByDate.get(yoyDate);
+    if (yoy != null && yoy > 0) {
+      predicted = blendValues(predicted, yoy, cfg.yoyWeight);
+    }
+
+    predicted = round2(Math.max(0, predicted));
+    synthetic.push({ date: iso, revenue: predicted });
+    forecastRows.push({ date: iso, weekday, dayType, revenue: predicted });
+  }
+
+  return forecastRows;
+}
+
+function calcAdaptiveLevel(series, fallbackLevel, cfg) {
+  if (!series.length) return fallbackLevel;
+  const slice = series.slice(-cfg.levelWindow);
+  let weight = 1;
+  let sumW = 0;
+  let sumV = 0;
+  for (let i = slice.length - 1; i >= 0; i -= 1) {
+    const revenue = Number(slice[i].revenue) || 0;
+    sumV += revenue * weight;
+    sumW += weight;
+    weight *= cfg.levelDecay;
+  }
+  const avg = sumW > 0 ? sumV / sumW : fallbackLevel;
+  return avg > 0 ? avg : fallbackLevel;
+}
+
+function calcDynamicWeekdayIndex(series, weekday, baseLevel, cfg) {
+  const slice = series.slice(-cfg.weekdayWindow);
+  let weight = 1;
+  let num = 0;
+  let den = 0;
+  let count = 0;
+  for (let i = slice.length - 1; i >= 0; i -= 1) {
+    const d = isoToDate(slice[i].date);
+    const wd = d ? (d.getDay() + 6) % 7 : -1;
+    if (wd === weekday) {
+      const revenue = Number(slice[i].revenue) || 0;
+      num += revenue * weight;
+      den += weight;
+      count += 1;
+    }
+    weight *= cfg.weekdayDecay;
+  }
+  if (den <= 0 || baseLevel <= 0) return 1;
+  const sameWeekdayAvg = num / den;
+  const raw = sameWeekdayAvg / baseLevel;
+  const reliability = Math.min(1, count / cfg.weekdayNeed);
+  return clampNumber(1 + (raw - 1) * reliability, cfg.weekdayMin, cfg.weekdayMax);
+}
+
+function getSeriesRevenueByDate(series, isoDate) {
+  for (let i = series.length - 1; i >= 0; i -= 1) {
+    if (series[i].date === isoDate) return Number(series[i].revenue) || 0;
+  }
+  return null;
+}
+
+function blendValues(a, b, weightB) {
+  const w = clampNumber(Number(weightB) || 0, 0, 1);
+  return a * (1 - w) + b * w;
 }
 
 function calcTrendIndex(historyDailyRows, cfg) {
@@ -1322,7 +1394,15 @@ function getForecastModeConfig(mode) {
       trendMin: 0.93,
       trendMax: 1.06,
       combinedMin: 0.72,
-      combinedMax: 1.2
+      combinedMax: 1.2,
+      levelWindow: 35,
+      levelDecay: 0.93,
+      weekdayWindow: 70,
+      weekdayDecay: 0.95,
+      weekdayNeed: 8,
+      dynamicWeekdayBlend: 0.35,
+      weekLagWeight: 0.3,
+      yoyWeight: 0.08
     };
   }
   if (mode === "aggressive") {
@@ -1339,7 +1419,15 @@ function getForecastModeConfig(mode) {
       trendMin: 0.85,
       trendMax: 1.18,
       combinedMin: 0.62,
-      combinedMax: 1.45
+      combinedMax: 1.45,
+      levelWindow: 28,
+      levelDecay: 0.9,
+      weekdayWindow: 84,
+      weekdayDecay: 0.94,
+      weekdayNeed: 6,
+      dynamicWeekdayBlend: 0.55,
+      weekLagWeight: 0.5,
+      yoyWeight: 0.15
     };
   }
   return {
@@ -1355,7 +1443,15 @@ function getForecastModeConfig(mode) {
     trendMin: 0.9,
     trendMax: 1.1,
     combinedMin: 0.7,
-    combinedMax: 1.3
+    combinedMax: 1.3,
+    levelWindow: 30,
+    levelDecay: 0.92,
+    weekdayWindow: 84,
+    weekdayDecay: 0.95,
+    weekdayNeed: 7,
+    dynamicWeekdayBlend: 0.45,
+    weekLagWeight: 0.4,
+    yoyWeight: 0.12
   };
 }
 

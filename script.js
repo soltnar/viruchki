@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-18.65";
+const APP_VERSION = "2026-03-18.66";
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
@@ -104,6 +104,7 @@ const els = {
   forecastSection: document.getElementById("forecastSection"),
   forecastFrom: document.getElementById("forecastFrom"),
   forecastTo: document.getElementById("forecastTo"),
+  forecastMode: document.getElementById("forecastMode"),
   buildForecast: document.getElementById("buildForecast"),
   forecastStats: document.getElementById("forecastStats"),
   forecastBody: document.getElementById("forecastBody"),
@@ -185,6 +186,7 @@ els.chart.addEventListener("touchmove", onChartPointerMove, { passive: true });
 els.chart.addEventListener("touchend", hideChartTooltip);
 if (els.forecastFrom) els.forecastFrom.addEventListener("change", () => renderForecast(state.filteredRows));
 if (els.forecastTo) els.forecastTo.addEventListener("change", () => renderForecast(state.filteredRows));
+if (els.forecastMode) els.forecastMode.addEventListener("change", () => renderForecast(state.filteredRows));
 if (els.buildForecast) els.buildForecast.addEventListener("click", () => renderForecast(state.filteredRows));
 toggleCompareCustom();
 updateComparisonUI();
@@ -1159,7 +1161,9 @@ function renderForecast(rows) {
   const history = Array.from(dailyMap.entries())
     .map(([date, revenue]) => ({ date, revenue }))
     .sort((a, b) => a.date.localeCompare(b.date));
-  const profile = buildForecastProfile(history);
+  const forecastMode = (els.forecastMode && els.forecastMode.value) || "base";
+  const cfg = getForecastModeConfig(forecastMode);
+  const profile = buildForecastProfile(history, cfg);
 
   const maxHistoryDate = history[history.length - 1].date;
   const defaultFrom = dateToIso(addDays(isoToDate(maxHistoryDate), 1));
@@ -1189,7 +1193,11 @@ function renderForecast(rows) {
     const monthIndex = profile.monthIndex.get(month) || 1;
     const dayTypeIndex = profile.dayTypeIndex.get(dayType) || 1;
     const trendIndex = profile.trendIndex || 1;
-    const combinedIndex = clampNumber(weekdayIndex * monthIndex * dayTypeIndex * trendIndex, 0.7, 1.3);
+    const combinedIndex = clampNumber(
+      weekdayIndex * monthIndex * dayTypeIndex * trendIndex,
+      cfg.combinedMin,
+      cfg.combinedMax
+    );
     const predicted = round2(Math.max(0, profile.baseAvg * combinedIndex));
     forecastRows.push({
       date: iso,
@@ -1214,7 +1222,7 @@ function renderForecast(rows) {
     <article class="stat">
       <p class="stat-title">Прогноз: среднее в день</p>
       <p class="stat-value">${formatMoney(avg)}</p>
-      <p class="stat-meta">Модель: день недели + месяц + тип дня + тренд (с ограничением оптимизма)</p>
+      <p class="stat-meta">Режим: ${cfg.label}. Модель: день недели + месяц + тип дня + тренд.</p>
     </article>
   `;
 
@@ -1228,7 +1236,7 @@ function renderForecast(rows) {
     .join("");
 }
 
-function buildForecastProfile(historyDailyRows) {
+function buildForecastProfile(historyDailyRows, cfg) {
   const baseAvg =
     historyDailyRows.reduce((sum, row) => sum + row.revenue, 0) / Math.max(1, historyDailyRows.length);
   const weekdayAgg = new Map();
@@ -1261,32 +1269,32 @@ function buildForecastProfile(historyDailyRows) {
     const avg = v.total / Math.max(1, v.count);
     const rawIdx = baseAvg > 0 ? avg / baseAvg : 1;
     const reliability = Math.min(1, v.count / 10);
-    weekdayIndex.set(k, clampNumber(1 + (rawIdx - 1) * reliability, 0.85, 1.15));
+    weekdayIndex.set(k, clampNumber(1 + (rawIdx - 1) * reliability, cfg.weekdayMin, cfg.weekdayMax));
   });
   const monthIndex = new Map();
   monthAgg.forEach((v, k) => {
     const avg = v.total / Math.max(1, v.count);
     const rawIdx = baseAvg > 0 ? avg / baseAvg : 1;
     const reliability = Math.min(1, v.count / 12);
-    monthIndex.set(k, clampNumber(1 + (rawIdx - 1) * reliability, 0.88, 1.12));
+    monthIndex.set(k, clampNumber(1 + (rawIdx - 1) * reliability, cfg.monthMin, cfg.monthMax));
   });
   const dayTypeIndex = new Map([
     ["workday", 1],
     ["weekend", 1],
-    ["holiday", 0.95]
+    ["holiday", cfg.defaultHolidayIndex]
   ]);
   dayTypeAgg.forEach((v, k) => {
     const avg = v.total / Math.max(1, v.count);
     const rawIdx = baseAvg > 0 ? avg / baseAvg : 1;
     const reliability = Math.min(1, v.count / 20);
-    dayTypeIndex.set(k, clampNumber(1 + (rawIdx - 1) * reliability, 0.85, 1.1));
+    dayTypeIndex.set(k, clampNumber(1 + (rawIdx - 1) * reliability, cfg.dayTypeMin, cfg.dayTypeMax));
   });
 
-  const trendIndex = calcTrendIndex(historyDailyRows);
+  const trendIndex = calcTrendIndex(historyDailyRows, cfg);
   return { baseAvg, weekdayIndex, monthIndex, dayTypeIndex, trendIndex };
 }
 
-function calcTrendIndex(historyDailyRows) {
+function calcTrendIndex(historyDailyRows, cfg) {
   if (historyDailyRows.length < 14) return 1;
   const sorted = [...historyDailyRows].sort((a, b) => a.date.localeCompare(b.date));
   const recent = sorted.slice(-14);
@@ -1296,7 +1304,59 @@ function calcTrendIndex(historyDailyRows) {
   const previousAvg = previous.reduce((s, r) => s + r.revenue, 0) / previous.length;
   if (previousAvg <= 0) return 1;
   const ratio = recentAvg / previousAvg;
-  return clampNumber(ratio, 0.9, 1.1);
+  return clampNumber(ratio, cfg.trendMin, cfg.trendMax);
+}
+
+function getForecastModeConfig(mode) {
+  if (mode === "conservative") {
+    return {
+      mode,
+      label: "Консервативный",
+      weekdayMin: 0.9,
+      weekdayMax: 1.1,
+      monthMin: 0.92,
+      monthMax: 1.08,
+      dayTypeMin: 0.9,
+      dayTypeMax: 1.05,
+      defaultHolidayIndex: 0.9,
+      trendMin: 0.93,
+      trendMax: 1.06,
+      combinedMin: 0.72,
+      combinedMax: 1.2
+    };
+  }
+  if (mode === "aggressive") {
+    return {
+      mode,
+      label: "Агрессивный",
+      weekdayMin: 0.8,
+      weekdayMax: 1.2,
+      monthMin: 0.85,
+      monthMax: 1.18,
+      dayTypeMin: 0.8,
+      dayTypeMax: 1.12,
+      defaultHolidayIndex: 0.95,
+      trendMin: 0.85,
+      trendMax: 1.18,
+      combinedMin: 0.62,
+      combinedMax: 1.45
+    };
+  }
+  return {
+    mode: "base",
+    label: "Базовый",
+    weekdayMin: 0.85,
+    weekdayMax: 1.15,
+    monthMin: 0.88,
+    monthMax: 1.12,
+    dayTypeMin: 0.85,
+    dayTypeMax: 1.1,
+    defaultHolidayIndex: 0.95,
+    trendMin: 0.9,
+    trendMax: 1.1,
+    combinedMin: 0.7,
+    combinedMax: 1.3
+  };
 }
 
 function clampNumber(value, min, max) {

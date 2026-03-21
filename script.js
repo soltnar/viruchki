@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-18.67";
+const APP_VERSION = "2026-03-21.68";
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
@@ -2115,20 +2115,25 @@ function buildWeatherCellHtml(period) {
 function formatWeatherSummary(list, cityCode, includeCityLabel) {
   const avgTempDay =
     list.reduce((sum, item) => sum + (Number(item.tempDay) || 0), 0) / Math.max(1, list.length);
+  const sky = getSkyConditionLabel(list);
+  const precip = getPrecipConditionLabel(list);
+  const condition = precip ? `${sky}, ${precip}` : sky;
+  const emoji = getConditionEmoji(sky, precip);
   const weatherCode = pickDominantWeatherCode(list);
-  const emoji = getWeatherEmoji(weatherCode);
   const label = getWeatherLabel(weatherCode);
   const cityPrefix = includeCityLabel ? `${WEATHER_LOCATIONS[cityCode].short}: ` : "";
   return `<span class="weather-line" title="${escapeHtml(label)}">${emoji} ${escapeHtml(cityPrefix)}${avgTempDay.toFixed(
     1
-  )}°C днем</span>`;
+  )}°C днем, ${escapeHtml(condition)}</span>`;
 }
 
 function pickDominantWeatherCode(list) {
   const weighted = new Map();
   list.forEach((item) => {
     const code = Number(item.weatherCode) || 0;
-    const score = 1 + Math.max(0, Number(item.precip) || 0) + Math.max(0, Number(item.cloud) || 0) / 100;
+    const precip = Math.max(0, Number(item.precip) || 0);
+    const cloud = Math.max(0, Number(item.cloud) || 0);
+    const score = 1 + precip * 2 + cloud / 300 + getWeatherPriority(code);
     weighted.set(code, (weighted.get(code) || 0) + score);
   });
   let bestCode = 0;
@@ -2140,6 +2145,66 @@ function pickDominantWeatherCode(list) {
     }
   });
   return bestCode;
+}
+
+function getWeatherPriority(code) {
+  if (code >= 95) return 8;
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 6;
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return 5;
+  if ([51, 53, 55, 56, 57].includes(code)) return 4;
+  if (code === 45 || code === 48) return 3;
+  if (code === 3) return 2;
+  return 1;
+}
+
+function getSkyConditionLabel(list) {
+  const avgCloud =
+    list.reduce((sum, item) => sum + Math.max(0, Number(item.cloud) || 0), 0) / Math.max(1, list.length);
+  if (avgCloud >= 75) return "пасмурно";
+  if (avgCloud >= 35) return "облачно";
+  return "ясно";
+}
+
+function getPrecipConditionLabel(list) {
+  const precipTotal = list.reduce((sum, item) => sum + Math.max(0, Number(item.precip) || 0), 0);
+  if (precipTotal < 0.3) return "";
+
+  let rain = 0;
+  let snow = 0;
+  let drizzle = 0;
+  let thunder = 0;
+  list.forEach((item) => {
+    const code = Number(item.weatherCode) || 0;
+    const amount = Math.max(0, Number(item.precip) || 0) || 1;
+    if (code >= 95) {
+      thunder += amount;
+    } else if ([71, 73, 75, 77, 85, 86].includes(code)) {
+      snow += amount;
+    } else if ([51, 53, 55, 56, 57].includes(code)) {
+      drizzle += amount;
+    } else if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) {
+      rain += amount;
+    } else if (amount > 0) {
+      rain += amount;
+    }
+  });
+
+  const dominant = [
+    { key: "гроза", value: thunder },
+    { key: "снег", value: snow },
+    { key: "дождь", value: rain },
+    { key: "морось", value: drizzle }
+  ].sort((a, b) => b.value - a.value)[0];
+  return dominant && dominant.value > 0 ? dominant.key : "осадки";
+}
+
+function getConditionEmoji(sky, precip) {
+  if (precip === "гроза") return "⛈️";
+  if (precip === "снег") return "🌨️";
+  if (precip === "дождь" || precip === "морось") return "🌧️";
+  if (sky === "пасмурно") return "☁️";
+  if (sky === "облачно") return "⛅";
+  return "☀️";
 }
 
 function getWeatherEmoji(code) {

@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-05-24.70";
+const APP_VERSION = "2026-05-24.71";
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
@@ -1763,28 +1763,35 @@ function updateWeatherForRows(rows) {
   const to = dates[dates.length - 1];
   appendDebugLog("info", "weather_fetch_start", { cities: missingCities, from, to });
 
-  Promise.all(missingCities.map((city) => fetchWeatherForCityRange(city, from, to)))
-    .then(() => {
-      if (state.weatherRequestSeq !== requestId) return;
-      state.weatherLoading = false;
+  Promise.allSettled(missingCities.map((city) => fetchWeatherForCityRange(city, from, to))).then((results) => {
+    if (state.weatherRequestSeq !== requestId) return;
+    state.weatherLoading = false;
+    const okCount = results.filter((r) => r.status === "fulfilled").length;
+    const failCount = results.length - okCount;
+    if (okCount > 0 && failCount === 0) {
       state.weatherError = "";
-      appendDebugLog("info", "weather_fetch_ok", { cities: missingCities, from, to });
-      renderWeatherImpact(state.filteredRows);
-      renderDateTotals(state.filteredRows);
-    })
-    .catch((error) => {
-      if (state.weatherRequestSeq !== requestId) return;
-      state.weatherLoading = false;
+      appendDebugLog("info", "weather_fetch_ok", { cities: missingCities, from, to, okCount, failCount });
+    } else if (okCount > 0 && failCount > 0) {
+      state.weatherError = "часть данных недоступна";
+      appendDebugLog("warn", "weather_fetch_partial", { cities: missingCities, from, to, okCount, failCount });
+    } else {
       state.weatherError = "погода недоступна";
+      const firstErr = results.find((r) => r.status === "rejected");
       appendDebugLog("warn", "weather_fetch_failed", {
-        message: error && error.message ? error.message : "weather_unknown_error",
+        message:
+          firstErr && firstErr.reason && firstErr.reason.message
+            ? firstErr.reason.message
+            : "weather_unknown_error",
         cities: missingCities,
         from,
-        to
+        to,
+        okCount,
+        failCount
       });
-      renderWeatherImpact(state.filteredRows);
-      renderDateTotals(state.filteredRows);
-    });
+    }
+    renderWeatherImpact(state.filteredRows);
+    renderDateTotals(state.filteredRows);
+  });
 }
 
 function renderWeatherImpact(rows) {
@@ -2156,15 +2163,18 @@ function buildWeatherCellHtml(period) {
   const cities = Array.from(period.cities || []);
   if (!dates.length || !cities.length) return '<span class="weather-muted">н/д</span>';
   if (state.weatherLoading) return '<span class="weather-muted">загрузка...</span>';
-  if (state.weatherError) return `<span class="weather-muted">${escapeHtml(state.weatherError)}</span>`;
-
   const chunks = cities.map((cityCode) => {
     const cityData = state.weatherByCityDate[cityCode] || {};
     const list = dates.map((date) => cityData[date]).filter(Boolean);
     if (!list.length) return `${WEATHER_LOCATIONS[cityCode].short}: н/д`;
     return formatWeatherSummary(list, cityCode, cities.length > 1);
   });
-  return chunks.join('<br/>');
+  const hasAnyData = chunks.some((line) => !/:\s*н\/д$/.test(line) && line !== "н/д");
+  if (!hasAnyData && state.weatherError) return `<span class="weather-muted">${escapeHtml(state.weatherError)}</span>`;
+  if (state.weatherError) {
+    return `${chunks.join('<br/>')}<br/><span class="weather-muted">${escapeHtml(state.weatherError)}</span>`;
+  }
+  return chunks.join("<br/>");
 }
 
 function formatWeatherSummary(list, cityCode, includeCityLabel) {

@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-03-21.68";
+const APP_VERSION = "2026-05-24.70";
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
@@ -1940,10 +1940,6 @@ async function fetchWeatherForCityRange(cityCode, from, to) {
   for (let i = 0; i < ranges.length; i += 1) {
     const range = ranges[i];
     if (range.from > range.to) continue;
-    const endpoint =
-      range.type === "archive"
-        ? "https://archive-api.open-meteo.com/v1/archive"
-        : "https://api.open-meteo.com/v1/forecast";
     const params = new URLSearchParams({
       latitude: String(location.latitude),
       longitude: String(location.longitude),
@@ -1952,17 +1948,76 @@ async function fetchWeatherForCityRange(cityCode, from, to) {
       start_date: range.from,
       end_date: range.to
     });
-    const response = await fetch(`${endpoint}?${params.toString()}`);
-    if (!response.ok) {
-      throw new Error(`weather_http_${response.status}`);
-    }
-    const data = await response.json();
+    const data = await fetchWeatherWithFallback(range.type, params, cityCode, range);
     const parsed = parseWeatherDailyPayload(data);
     const cityData = state.weatherByCityDate[cityCode] || {};
     Object.keys(parsed).forEach((date) => {
       cityData[date] = parsed[date];
     });
     state.weatherByCityDate[cityCode] = cityData;
+  }
+}
+
+async function fetchWeatherWithFallback(rangeType, params, cityCode, range) {
+  const endpoints =
+    rangeType === "archive"
+      ? [
+          "https://archive-api.open-meteo.com/v1/archive",
+          "https://historical-forecast-api.open-meteo.com/v1/forecast"
+        ]
+      : [
+          "https://api.open-meteo.com/v1/forecast",
+          "https://historical-forecast-api.open-meteo.com/v1/forecast"
+        ];
+
+  let lastError = null;
+  for (let e = 0; e < endpoints.length; e += 1) {
+    const endpoint = endpoints[e];
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const data = await fetchJsonWithTimeout(`${endpoint}?${params.toString()}`, 15000);
+        appendDebugLog("info", "weather_fetch_provider_ok", {
+          city: cityCode,
+          type: rangeType,
+          provider: endpoint,
+          from: range.from,
+          to: range.to,
+          attempt
+        });
+        return data;
+      } catch (error) {
+        lastError = error;
+        appendDebugLog("warn", "weather_fetch_provider_fail", {
+          city: cityCode,
+          type: rangeType,
+          provider: endpoint,
+          from: range.from,
+          to: range.to,
+          attempt,
+          message: error && error.message ? error.message : "weather_fetch_error"
+        });
+      }
+    }
+  }
+  throw lastError || new Error("weather_all_providers_failed");
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`weather_http_${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      throw new Error("weather_timeout");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

@@ -17,7 +17,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -37,27 +37,20 @@ jobs:
         with:
           ref: main
 
-      - name: Update Saby archive
+      - name: Update yesterday in secure storage
         if: github.event_name != 'push'
         env:
-          SABY_APP_CLIENT_ID: ${{ secrets.SABY_APP_CLIENT_ID }}
-          SABY_APP_SECRET: ${{ secrets.SABY_APP_SECRET }}
-          SABY_SERVICE_KEY: ${{ secrets.SABY_SERVICE_KEY }}
+          CRON_SECRET: ${{ secrets.SUPABASE_CRON_SECRET }}
           DATE_FROM: ${{ inputs.from }}
           DATE_TO: ${{ inputs.to }}
-        run: node update_revenue_data.mjs "$DATE_FROM" "$DATE_TO"
-
-      - name: Save updated archive
-        if: github.event_name != 'push'
         run: |
-          if git diff --quiet -- data; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data
-          git commit -m "Обновить архив выручки Saby"
-          git push
+          FROM="${DATE_FROM:-$(TZ=Europe/Moscow date -d yesterday +%F)}"
+          TO="${DATE_TO:-$FROM}"
+          curl --fail-with-body --silent --show-error \
+            -X POST "https://wqxbnwcdkobgeyhdmqup.supabase.co/functions/v1/revenue-api" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            --data "{\"from\":\"$FROM\",\"to\":\"$TO\"}"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

@@ -23,6 +23,71 @@ body {
     var(--bg);
 }
 
+.is-hidden {
+  display: none !important;
+}
+
+.auth-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: min(440px, 100%);
+  padding: 34px;
+  text-align: center;
+  background: #fffffff2;
+  border: 1px solid #eef2eb;
+  border-radius: 22px;
+  box-shadow: 0 20px 60px #23452e1a;
+}
+
+.auth-card h1 {
+  margin: 12px 0 8px;
+}
+
+.auth-card p {
+  color: var(--subtle);
+}
+
+.auth-mark {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: #fff;
+  background: var(--accent);
+  font-size: 1.8rem;
+  font-weight: 800;
+}
+
+.google-login {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 12px;
+}
+
+.hero-account {
+  float: right;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--subtle);
+  font-size: 0.86rem;
+}
+
+.secondary-button {
+  min-height: 32px;
+  padding: 5px 10px;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
 .bg-shape {
   position: fixed;
   border-radius: 999px;
@@ -96,6 +161,24 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.saby-details > summary {
+  justify-content: space-between;
+}
+
+.api-panel-copy {
+  grid-column: 1 / -1;
+}
+
+.api-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.api-actions button {
+  flex: 1 1 160px;
 }
 
 .quick-periods button {

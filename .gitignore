@@ -2,3 +2,4 @@
 *.key
 *.har
 .DS_Store
+data/

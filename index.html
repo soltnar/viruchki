@@ -7,27 +7,66 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260729-2" />
+    <link rel="stylesheet" href="./styles.css?v=20260729-3" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
     <div class="bg-shape bg-shape-2"></div>
 
-    <main class="container">
+    <section id="authGate" class="auth-gate">
+      <div class="auth-card">
+        <div class="auth-mark">₽</div>
+        <h1>Выручка ресторанов</h1>
+        <p>Доступ к финансовым данным защищён. Войдите разрешённым аккаунтом Google.</p>
+        <button id="googleLogin" type="button" class="google-login">Войти через Google</button>
+        <div id="authStatus" class="api-status" role="status" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <main id="app" class="container is-hidden">
       <header class="hero">
+        <div class="hero-account">
+          <span id="userEmail"></span>
+          <button id="logout" type="button" class="secondary-button">Выйти</button>
+        </div>
         <h1>Мониторинг выручки ресторанов</h1>
         <p>
           Данные загружаются напрямую из Saby по складам кухни и бара. Выберите период —
           сайт обновит показатели, графики и итоговую таблицу.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-07-29.2</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-07-29.3</span></p>
       </header>
 
-      <section class="panel api-panel">
-        <div class="api-panel-copy">
-          <h2>Данные Saby</h2>
-          <p class="hint">Точная реализация с учетом складов и возвратов. Вчерашний день фиксируется ежедневно в 05:00 МСК.</p>
-        </div>
+      <section class="panel">
+        <details id="sabyDetails" class="saby-details">
+          <summary class="collapsible-summary">
+            <h2>Данные Saby</h2>
+          </summary>
+          <div class="api-panel collapsible-content">
+            <div class="api-panel-copy">
+              <p class="hint">Просмотр читает сохранённые данные. «Обновить из Saby» заново запрашивает выбранный период (не более 31 дня). Вчера обновляется автоматически в 05:00 МСК.</p>
+            </div>
+            <label>
+              <span>С даты</span>
+              <input id="apiDateFrom" type="date" />
+            </label>
+            <label>
+              <span>По дату</span>
+              <input id="apiDateTo" type="date" />
+            </label>
+            <div class="api-actions">
+              <button id="loadApiData" type="button">Показать сохранённые</button>
+              <button id="refreshApiData" type="button">Обновить из Saby</button>
+            </div>
+            <div id="apiStatus" class="api-status" role="status" aria-live="polite">
+              Готово к загрузке.
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel filters">
+        <h2 class="section-title">Фильтры</h2>
         <div class="quick-periods" aria-label="Быстрый выбор периода">
           <button type="button" data-period="today">Сегодня</button>
           <button type="button" data-period="yesterday">Вчера</button>
@@ -35,23 +74,9 @@
           <button type="button" data-period="previous-week">Прошлая неделя</button>
           <button type="button" data-period="current-month">Текущий месяц</button>
           <button type="button" data-period="previous-month">Прошлый месяц</button>
+          <button type="button" data-period="current-year">Текущий год</button>
+          <button type="button" data-period="previous-year">Прошлый год</button>
         </div>
-        <label>
-          <span>С даты</span>
-          <input id="apiDateFrom" type="date" />
-        </label>
-        <label>
-          <span>По дату</span>
-          <input id="apiDateTo" type="date" />
-        </label>
-        <button id="loadApiData" type="button">Показать данные</button>
-        <div id="apiStatus" class="api-status" role="status" aria-live="polite">
-          Подготовка загрузки…
-        </div>
-      </section>
-
-      <section class="panel filters">
-        <h2 class="section-title">Фильтры</h2>
         <div class="filter-group data-range-group">
           <label>Данные: период выборки</label>
           <div class="data-range-row">
@@ -338,7 +363,8 @@
       </section>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./script.js?v=20260729-1"></script>
+    <script src="./script.js?v=20260729-3"></script>
   </body>
 </html>

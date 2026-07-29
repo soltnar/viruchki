@@ -15,7 +15,12 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-07-29.2";
+const APP_VERSION = "2026-07-29.3";
+const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
+const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
+const ALLOWED_EMAIL = "soltnar@gmail.com";
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
@@ -69,7 +74,14 @@ const els = {
   apiDateFrom: document.getElementById("apiDateFrom"),
   apiDateTo: document.getElementById("apiDateTo"),
   loadApiData: document.getElementById("loadApiData"),
+  refreshApiData: document.getElementById("refreshApiData"),
   apiStatus: document.getElementById("apiStatus"),
+  authGate: document.getElementById("authGate"),
+  authStatus: document.getElementById("authStatus"),
+  googleLogin: document.getElementById("googleLogin"),
+  logout: document.getElementById("logout"),
+  app: document.getElementById("app"),
+  userEmail: document.getElementById("userEmail"),
   restaurantFilter: document.getElementById("restaurantFilter"),
   dateFrom: document.getElementById("dateFrom"),
   dateTo: document.getElementById("dateTo"),
@@ -127,6 +139,9 @@ initExclusionRules();
 initWeatherImpactToggle();
 
 els.loadApiData.addEventListener("click", loadRevenueFromApi);
+els.refreshApiData.addEventListener("click", refreshRevenueFromSaby);
+els.googleLogin.addEventListener("click", signInWithGoogle);
+els.logout.addEventListener("click", signOut);
 document.querySelector(".quick-periods")?.addEventListener("click", onQuickPeriodClick);
 els.restaurantFilter.addEventListener("change", applyFilters);
 els.dateFrom.addEventListener("change", applyFilters);
@@ -197,14 +212,64 @@ updateComparisonUI();
 updateWarehouseActionButtons();
 updateWeatherImpactUI();
 initApiDates();
-loadRevenueFromApi();
+initAuth();
 
 function initApiDates() {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
-  const todayIso = dateToIso(today);
-  els.apiDateFrom.value = todayIso;
-  els.apiDateTo.value = todayIso;
+  const yesterday = addDays(today, -1);
+  const yesterdayIso = dateToIso(yesterday);
+  els.apiDateFrom.value = yesterdayIso;
+  els.apiDateTo.value = yesterdayIso;
+  els.dateFrom.value = yesterdayIso;
+  els.dateTo.value = yesterdayIso;
+  document.querySelector('[data-period="yesterday"]')?.classList.add("is-active");
+}
+
+async function initAuth() {
+  const { data } = await supabaseClient.auth.getSession();
+  await applySession(data.session);
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    setTimeout(() => applySession(session), 0);
+  });
+}
+
+async function applySession(session) {
+  const email = String(session?.user?.email || "").toLowerCase();
+  if (!session) {
+    els.authGate.classList.remove("is-hidden");
+    els.app.classList.add("is-hidden");
+    return;
+  }
+  if (email !== ALLOWED_EMAIL) {
+    await supabaseClient.auth.signOut();
+    els.authStatus.textContent = "Этот Google-аккаунт не имеет доступа.";
+    els.authStatus.className = "api-status is-error";
+    return;
+  }
+  els.userEmail.textContent = email;
+  els.authGate.classList.add("is-hidden");
+  els.app.classList.remove("is-hidden");
+  if (!state.rows.length) loadRevenueFromApi();
+}
+
+async function signInWithGoogle() {
+  els.googleLogin.disabled = true;
+  els.authStatus.textContent = "Открываем Google…";
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: "https://soltnar.github.io/viruchki/" }
+  });
+  if (error) {
+    els.authStatus.textContent = `Не удалось открыть вход: ${error.message}`;
+    els.authStatus.className = "api-status is-error";
+    els.googleLogin.disabled = false;
+  }
+}
+
+async function signOut() {
+  await supabaseClient.auth.signOut();
+  location.replace("https://soltnar.github.io/viruchki/");
 }
 
 function onQuickPeriodClick(event) {
@@ -236,6 +301,13 @@ function onQuickPeriodClick(event) {
       start.setMonth(start.getMonth() - 1, 1);
       end.setDate(0);
       break;
+    case "current-year":
+      start.setMonth(0, 1);
+      break;
+    case "previous-year":
+      start.setFullYear(start.getFullYear() - 1, 0, 1);
+      end.setFullYear(end.getFullYear() - 1, 11, 31);
+      break;
     default:
       break;
   }
@@ -248,6 +320,14 @@ function onQuickPeriodClick(event) {
 }
 
 async function loadRevenueFromApi() {
+  return requestRevenueData(false);
+}
+
+async function refreshRevenueFromSaby() {
+  return requestRevenueData(true);
+}
+
+async function requestRevenueData(forceRefresh) {
   if (state.apiLoading) return;
   const from = els.apiDateFrom.value;
   const to = els.apiDateTo.value;
@@ -258,40 +338,26 @@ async function loadRevenueFromApi() {
 
   state.apiLoading = true;
   els.loadApiData.disabled = true;
-  setApiStatus("Загружаем реализацию из Saby…", "loading");
+  els.refreshApiData.disabled = true;
+  setApiStatus(forceRefresh ? "Запрашиваем свежие данные в Saby…" : "Читаем сохранённые данные…", "loading");
 
   try {
-    let response = await fetch(`/api/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
-      cache: "no-store"
-    });
-    if (!response.ok && [404, 405].includes(response.status)) {
-      const manifestResponse = await fetch(`./data/index.json?t=${Date.now()}`, { cache: "no-store" });
-      if (!manifestResponse.ok) throw new Error(`Архив пока недоступен (${manifestResponse.status})`);
-      const manifest = await manifestResponse.json();
-      const months = monthsBetween(from, to);
-      const missing = months.filter(
-        (month) => !manifest.months?.some((item) => item.month === month)
-      );
-      if (missing.length) {
-        throw new Error(`В архиве пока нет периода: ${missing.join(", ")}`);
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error("Сессия входа истекла. Войдите снова.");
+    const response = await fetch(
+      forceRefresh ? REVENUE_API_URL : `${REVENUE_API_URL}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      {
+        method: forceRefresh ? "POST" : "GET",
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          "Content-Type": "application/json"
+        },
+        body: forceRefresh ? JSON.stringify({ from, to }) : undefined
       }
-      const monthlyPayloads = await Promise.all(
-        months.map(async (month) => {
-          const monthResponse = await fetch(`./data/${month}.json?t=${Date.now()}`, {
-            cache: "no-store"
-          });
-          if (!monthResponse.ok) throw new Error(`Не удалось прочитать архив ${month}`);
-          return monthResponse.json();
-        })
-      );
-      response = {
-        ok: true,
-        json: async () => ({
-          ...manifest,
-          rows: monthlyPayloads.flatMap((item) => item.rows || [])
-        })
-      };
-    }
+    );
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || `Ошибка ${response.status}`);
     if (!Array.isArray(payload.rows)) throw new Error("Сервис вернул данные в неизвестном формате");
@@ -322,12 +388,9 @@ async function loadRevenueFromApi() {
 
     const loadedAt = payload.generatedAt
       ? new Date(payload.generatedAt).toLocaleString("ru-RU")
-      : "ещё не выполнялось";
-    const available = payload.minDate && payload.maxDate
-      ? ` Архив: ${formatDate(payload.minDate)}–${formatDate(payload.maxDate)}.`
-      : "";
+      : new Date().toLocaleString("ru-RU");
     setApiStatus(
-      `Показано ${state.rows.length} строк. Данные обновлены ${loadedAt}.${available}`,
+      `${forceRefresh ? "Saby обновлён." : "Данные загружены."} Показано ${state.rows.length} строк. ${loadedAt}.`,
       "success"
     );
   } catch (error) {
@@ -336,6 +399,7 @@ async function loadRevenueFromApi() {
   } finally {
     state.apiLoading = false;
     els.loadApiData.disabled = false;
+    els.refreshApiData.disabled = false;
   }
 }
 

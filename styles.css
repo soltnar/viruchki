@@ -965,7 +965,10 @@ body.weather-impact-off .weather-col {
 #weatherImpactSection,
 #seasonalitySection,
 #forecastSection,
-#compareSection,
+#compareSection {
+  order: 3;
+}
+
 #chartSection {
   order: 2;
 }

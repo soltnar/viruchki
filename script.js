@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-07-29.3";
+const APP_VERSION = "2026-07-29.4";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -144,8 +144,8 @@ els.googleLogin.addEventListener("click", signInWithGoogle);
 els.logout.addEventListener("click", signOut);
 document.querySelector(".quick-periods")?.addEventListener("click", onQuickPeriodClick);
 els.restaurantFilter.addEventListener("change", applyFilters);
-els.dateFrom.addEventListener("change", applyFilters);
-els.dateTo.addEventListener("change", applyFilters);
+els.dateFrom.addEventListener("change", onFilterDateRangeChange);
+els.dateTo.addEventListener("change", onFilterDateRangeChange);
 els.warehouseType.addEventListener("change", applyFilters);
 els.compareMode.addEventListener("change", () => {
   toggleCompareCustom();
@@ -317,6 +317,26 @@ function onQuickPeriodClick(event) {
     item.classList.toggle("is-active", item === button);
   });
   loadRevenueFromApi();
+}
+
+let filterDateLoadTimer = null;
+
+function onFilterDateRangeChange() {
+  const from = els.dateFrom.value;
+  const to = els.dateTo.value;
+  if (!from || !to || from > to) {
+    setApiStatus("Проверьте даты периода.", "error");
+    return;
+  }
+
+  els.apiDateFrom.value = from;
+  els.apiDateTo.value = to;
+  document.querySelectorAll(".quick-periods button").forEach((item) => {
+    item.classList.remove("is-active");
+  });
+
+  clearTimeout(filterDateLoadTimer);
+  filterDateLoadTimer = setTimeout(() => loadRevenueFromApi(), 180);
 }
 
 async function loadRevenueFromApi() {

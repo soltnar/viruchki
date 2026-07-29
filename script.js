@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-07-29.4";
+const APP_VERSION = "2026-07-29.5";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -3334,6 +3334,16 @@ function exportChartToPng() {
 function updatePrintModeFlags() {
   const rowsInRange = getRowsForCurrentDateRange(state.filteredRows || []);
   const uniqueDaysInRange = getUniqueDatedDayCount(rowsInRange);
+  const from = normalizeFilterDate(els.dateFrom && els.dateFrom.value);
+  const to = normalizeFilterDate(els.dateTo && els.dateTo.value);
+  const periodLabel = from && to
+    ? from === to
+      ? `За ${formatDate(from)}`
+      : `Период: ${formatDate(from)} - ${formatDate(to)}`
+    : "Выбранный период";
+  const printPeriod = document.getElementById("printReportPeriod");
+  if (printPeriod) printPeriod.textContent = periodLabel;
+  document.body.classList.toggle("print-single-day", uniqueDaysInRange === 1);
   document.body.classList.toggle("print-hide-comparison", !isComparisonEnabled());
   const weatherSeries = buildWeatherRevenueSeries(rowsInRange);
   const hideWeatherForPrint =
@@ -3390,6 +3400,7 @@ function formatDateForFileName(isoDate) {
 
 window.addEventListener("beforeprint", updatePrintModeFlags);
 window.addEventListener("afterprint", () => {
+  document.body.classList.remove("print-single-day");
   document.body.classList.remove("print-hide-comparison");
   document.body.classList.remove("print-hide-weather-impact");
   document.body.classList.remove("print-hide-seasonality");

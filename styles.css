@@ -88,6 +88,10 @@ body {
   border: 1px solid var(--line);
 }
 
+.print-report-header {
+  display: none;
+}
+
 .bg-shape {
   position: fixed;
   border-radius: 999px;
@@ -956,13 +960,20 @@ body.weather-impact-off .weather-col {
 
 @media print {
   .bg-shape,
+  .hero,
+  #sabySection,
   .api-panel,
   .filters,
+  #weatherImpactSection,
+  #seasonalitySection,
+  #forecastSection,
+  #compareSection,
   #chartSection,
   .table-controls,
   #downloadLog,
   .table-controls .hint,
-  .chart-tooltip {
+  .chart-tooltip,
+  .screen-only-heading {
     display: none !important;
   }
 
@@ -983,7 +994,7 @@ body.weather-impact-off .weather-col {
   .container {
     width: 100%;
     margin: 0;
-    gap: 8px;
+    gap: 5px;
   }
 
   .panel,
@@ -996,6 +1007,24 @@ body.weather-impact-off .weather-col {
 
   .hero .hint {
     display: none;
+  }
+
+  .print-report-header {
+    display: block;
+    padding-bottom: 5mm;
+    border-bottom: 1px solid #bfc9bf;
+    margin-bottom: 4mm;
+  }
+
+  .print-report-header h1 {
+    margin: 0 0 2mm;
+    font-size: 18px;
+  }
+
+  .print-report-header p {
+    margin: 0;
+    color: #58645c;
+    font-size: 10px;
   }
 
   .print-hide-comparison #compareSection {
@@ -1041,13 +1070,15 @@ body.weather-impact-off .weather-col {
   }
 
   .stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     gap: 6px;
+    margin-bottom: 3mm;
   }
 
   .stat {
     border-color: #dfe5dd;
-    border-radius: 8px;
-    padding: 8px;
+    border-radius: 6px;
+    padding: 6px 8px;
   }
 
   .stat-title {
@@ -1055,7 +1086,22 @@ body.weather-impact-off .weather-col {
   }
 
   .stat-value {
-    font-size: 13px;
+    font-size: 12px;
+  }
+
+  #dateTotalsTable .weather-col,
+  #dateTotalsTable .weather-cell {
+    display: none !important;
+  }
+
+  .print-single-day #dateTotalsHeading,
+  .print-single-day #dateTotalsWrap {
+    display: none !important;
+  }
+
+  .print-single-day #detailTable th:first-child,
+  .print-single-day #detailTable td:first-child {
+    display: none !important;
   }
 
   th,

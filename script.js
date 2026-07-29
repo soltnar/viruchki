@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-07-29.5";
+const APP_VERSION = "2026-07-29.6";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -96,6 +96,7 @@ const els = {
   chartGroupBy: document.getElementById("chartGroupBy"),
   chartCompareView: document.getElementById("chartCompareView"),
   enableComparison: document.getElementById("enableComparison"),
+  compareDetails: document.getElementById("compareDetails"),
   viewWarehouses: document.getElementById("viewWarehouses"),
   detailSort: document.getElementById("detailSort"),
   detailGroupBy: document.getElementById("detailGroupBy"),
@@ -117,6 +118,7 @@ const els = {
   seasonMonthBody: document.getElementById("seasonMonthBody"),
   seasonWeekdayBody: document.getElementById("seasonWeekdayBody"),
   forecastSection: document.getElementById("forecastSection"),
+  forecastDetails: document.getElementById("forecastDetails"),
   forecastFrom: document.getElementById("forecastFrom"),
   forecastTo: document.getElementById("forecastTo"),
   forecastMode: document.getElementById("forecastMode"),
@@ -3344,12 +3346,16 @@ function updatePrintModeFlags() {
   const printPeriod = document.getElementById("printReportPeriod");
   if (printPeriod) printPeriod.textContent = periodLabel;
   document.body.classList.toggle("print-single-day", uniqueDaysInRange === 1);
-  document.body.classList.toggle("print-hide-comparison", !isComparisonEnabled());
-  const weatherSeries = buildWeatherRevenueSeries(rowsInRange);
-  const hideWeatherForPrint =
-    !state.showWeatherImpact || state.weatherLoading || uniqueDaysInRange < 3 || weatherSeries.length < 3;
-  document.body.classList.toggle("print-hide-weather-impact", hideWeatherForPrint);
-  document.body.classList.toggle("print-hide-seasonality", uniqueDaysInRange < 2);
+  const includeComparison = Boolean(els.compareDetails && els.compareDetails.open && isComparisonEnabled());
+  document.body.classList.toggle("print-hide-comparison", !includeComparison);
+  document.body.classList.toggle(
+    "print-hide-seasonality",
+    !els.seasonalityDetails || !els.seasonalityDetails.open
+  );
+  document.body.classList.toggle(
+    "print-hide-forecast",
+    !els.forecastDetails || !els.forecastDetails.open
+  );
 }
 
 function getRowsForCurrentDateRange(rows) {
@@ -3402,8 +3408,8 @@ window.addEventListener("beforeprint", updatePrintModeFlags);
 window.addEventListener("afterprint", () => {
   document.body.classList.remove("print-single-day");
   document.body.classList.remove("print-hide-comparison");
-  document.body.classList.remove("print-hide-weather-impact");
   document.body.classList.remove("print-hide-seasonality");
+  document.body.classList.remove("print-hide-forecast");
 });
 
 window.addEventListener("resize", () => {

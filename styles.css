@@ -958,17 +958,24 @@ body.weather-impact-off .weather-col {
   }
 }
 
+#revenueSection {
+  order: 1;
+}
+
+#weatherImpactSection,
+#seasonalitySection,
+#forecastSection,
+#compareSection,
+#chartSection {
+  order: 2;
+}
+
 @media print {
   .bg-shape,
   .hero,
   #sabySection,
   .api-panel,
   .filters,
-  #weatherImpactSection,
-  #seasonalitySection,
-  #forecastSection,
-  #compareSection,
-  #chartSection,
   .table-controls,
   #downloadLog,
   .table-controls .hint,
@@ -989,6 +996,9 @@ body.weather-impact-off .weather-col {
 
   body {
     background: #fff;
+    color: #173126;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   .container {
@@ -1003,6 +1013,7 @@ body.weather-impact-off .weather-col {
     background: #fff;
     padding: 0;
     animation: none;
+    box-shadow: none;
   }
 
   .hero .hint {
@@ -1011,8 +1022,10 @@ body.weather-impact-off .weather-col {
 
   .print-report-header {
     display: block;
-    padding-bottom: 5mm;
-    border-bottom: 1px solid #bfc9bf;
+    padding: 4mm 5mm;
+    border-left: 4px solid #168c78;
+    border-radius: 0 7px 7px 0;
+    background: linear-gradient(90deg, #e8f7f2 0%, #f7fbf9 72%, #fff 100%);
     margin-bottom: 4mm;
   }
 
@@ -1031,7 +1044,7 @@ body.weather-impact-off .weather-col {
     display: none !important;
   }
 
-  .print-hide-weather-impact #weatherImpactSection {
+  .print-hide-comparison #chartSection {
     display: none !important;
   }
 
@@ -1039,16 +1052,44 @@ body.weather-impact-off .weather-col {
     display: none !important;
   }
 
-  .weather-impact-off #weatherImpactSection {
+  .print-hide-forecast #forecastSection {
     display: none !important;
+  }
+
+  body.weather-impact-off #weatherImpactSection {
+    display: block !important;
+  }
+
+  body.weather-impact-off .weather-col {
+    display: table-cell !important;
   }
 
   #compareSection .filters {
     display: none !important;
   }
 
-  body.weather-impact-off .weather-col {
-    display: none !important;
+  #weatherImpactSection,
+  #seasonalitySection,
+  #forecastSection,
+  #compareSection,
+  #chartSection {
+    margin-top: 4mm;
+    padding-top: 2mm;
+    border-top: 2px solid #dcefe8;
+    break-inside: avoid;
+  }
+
+  details[open] > .collapsible-summary {
+    list-style: none;
+    pointer-events: none;
+  }
+
+  details[open] > .collapsible-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .collapsible-content {
+    padding: 0;
   }
 
   .table-wrap {
@@ -1076,9 +1117,24 @@ body.weather-impact-off .weather-col {
   }
 
   .stat {
-    border-color: #dfe5dd;
+    border-color: #cfe6dc;
     border-radius: 6px;
     padding: 6px 8px;
+    background: #f2faf7;
+  }
+
+  .stat:nth-child(3n + 1) {
+    border-left: 3px solid #168c78;
+  }
+
+  .stat:nth-child(3n + 2) {
+    border-left: 3px solid #e7a23b;
+    background: #fff9ef;
+  }
+
+  .stat:nth-child(3n) {
+    border-left: 3px solid #5478a8;
+    background: #f3f7fc;
   }
 
   .stat-title {
@@ -1089,14 +1145,12 @@ body.weather-impact-off .weather-col {
     font-size: 12px;
   }
 
-  #dateTotalsTable .weather-col,
-  #dateTotalsTable .weather-cell {
-    display: none !important;
+  #weatherImpactStats {
+    grid-template-columns: 1fr !important;
   }
 
-  .print-single-day #dateTotalsHeading,
-  .print-single-day #dateTotalsWrap {
-    display: none !important;
+  #weatherImpactStats .stat {
+    max-width: none;
   }
 
   .print-single-day #detailTable th:first-child,
@@ -1114,7 +1168,8 @@ body.weather-impact-off .weather-col {
 
   th {
     position: static !important;
-    background: #f2f6f1;
+    background: #247d6c;
+    color: #fff;
     font-size: 9px;
   }
 
@@ -1128,7 +1183,12 @@ body.weather-impact-off .weather-col {
   }
 
   .group-row td {
-    background: #f7faf6;
+    background: #eaf6f1;
+    color: #18372c;
+  }
+
+  tbody tr:nth-child(even):not(.group-row) td {
+    background: #f7faf9;
   }
 
   .weekend-row td,
@@ -1147,5 +1207,14 @@ body.weather-impact-off .weather-col {
     text-decoration: none;
     cursor: default;
     pointer-events: none;
+  }
+
+  #chartSection canvas {
+    max-height: 95mm !important;
+  }
+
+  #chartSection .chart-controls button,
+  #chartSection .chart-controls label {
+    display: none !important;
   }
 }

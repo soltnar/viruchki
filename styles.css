@@ -1064,6 +1064,10 @@ body.weather-impact-off .weather-col {
     display: table-cell !important;
   }
 
+  body.print-hide-weather-impact #weatherImpactSection {
+    display: none !important;
+  }
+
   #compareSection .filters {
     display: none !important;
   }

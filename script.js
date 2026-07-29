@@ -2,7 +2,7 @@ const state = {
   rows: [],
   filteredRows: [],
   expandedGroups: new Set(),
-  showWarehouses: true,
+  showWarehouses: false,
   detailSort: "revenue_desc",
   compareOptions: [],
   chartMeta: null,
@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-07-29.6";
+const APP_VERSION = "2026-07-29.7";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -3356,6 +3356,10 @@ function updatePrintModeFlags() {
     "print-hide-forecast",
     !els.forecastDetails || !els.forecastDetails.open
   );
+  const weatherSeries = buildWeatherRevenueSeries(rowsInRange);
+  const hasWeatherAnalysis =
+    !state.weatherLoading && uniqueDaysInRange >= 3 && weatherSeries.length >= 3;
+  document.body.classList.toggle("print-hide-weather-impact", !hasWeatherAnalysis);
 }
 
 function getRowsForCurrentDateRange(rows) {
@@ -3410,6 +3414,7 @@ window.addEventListener("afterprint", () => {
   document.body.classList.remove("print-hide-comparison");
   document.body.classList.remove("print-hide-seasonality");
   document.body.classList.remove("print-hide-forecast");
+  document.body.classList.remove("print-hide-weather-impact");
 });
 
 window.addEventListener("resize", () => {

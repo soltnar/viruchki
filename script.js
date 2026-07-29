@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-07-29.7";
+const APP_VERSION = "2026-07-29.8";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -2862,7 +2862,7 @@ function renderChart(baseRows, from, to) {
   if (!chartCtx) chartCtx = ctx;
   hideChartTooltip();
 
-  const groupBy = els.chartGroupBy ? els.chartGroupBy.value || "day" : "day";
+  const groupBy = els.chartGroupBy ? els.chartGroupBy.value || "restaurant" : "restaurant";
   const compareView = isComparisonEnabled()
     ? (els.chartCompareView ? els.chartCompareView.value || "overlay" : "overlay")
     : "none";
@@ -2875,10 +2875,20 @@ function renderChart(baseRows, from, to) {
     return;
   }
 
-  const currentSeries = aggregateRangeByPeriod(baseRows, ranges.current.from, ranges.current.to, groupBy);
-  const previousSeries = ranges.previous
-    ? aggregateRangeByPeriod(baseRows, ranges.previous.from, ranges.previous.to, groupBy)
+  const currentSeries = groupBy === "restaurant"
+    ? aggregateRangeByRestaurant(baseRows, ranges.current.from, ranges.current.to)
+    : aggregateRangeByPeriod(baseRows, ranges.current.from, ranges.current.to, groupBy);
+  let previousSeries = ranges.previous
+    ? groupBy === "restaurant"
+      ? aggregateRangeByRestaurant(baseRows, ranges.previous.from, ranges.previous.to)
+      : aggregateRangeByPeriod(baseRows, ranges.previous.from, ranges.previous.to, groupBy)
     : [];
+  if (groupBy === "restaurant" && previousSeries.length) {
+    const previousByRestaurant = new Map(previousSeries.map((item) => [item.key, item]));
+    previousSeries = currentSeries.map((item) =>
+      previousByRestaurant.get(item.key) || { key: item.key, label: item.label, total: 0 }
+    );
+  }
   state.chartMeta = drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, compareView);
 }
 
@@ -2901,9 +2911,10 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   const previousValues = currentSeries.map((_, i) => (i < previousSeries.length ? previousSeries[i].total : null));
   const isIndexMode = compareView === "index_100";
   const comparisonEnabled = compareView !== "none";
-  const averageWindow = groupBy === "day" ? 7 : groupBy === "week" ? 4 : 3;
+  const isRestaurantMode = groupBy === "restaurant";
+  const averageWindow = groupBy === "day" ? 7 : groupBy === "week" ? 4 : groupBy === "month" ? 3 : 1;
   const averageLabelSuffix = groupBy === "day" ? "дн" : groupBy === "week" ? "нед" : "мес";
-  const periodNoun = groupBy === "day" ? "день" : groupBy === "week" ? "неделю" : "месяц";
+  const periodNoun = isRestaurantMode ? "ресторан" : groupBy === "day" ? "день" : groupBy === "week" ? "неделю" : "месяц";
   const currentIndexed = isIndexMode ? toIndexSeries(values) : null;
   const previousIndexed = isIndexMode ? toIndexSeries(previousValues) : null;
   const currentPlotValues = isIndexMode ? currentIndexed : values;
@@ -3045,7 +3056,7 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
       startedAvgLine = true;
     }
   });
-  if (!isIndexMode) ctx.stroke();
+  if (!isIndexMode && !isRestaurantMode) ctx.stroke();
 
   // Previous period line (overlay/index modes)
   const hasPreviousData = comparisonEnabled && previousPlotValues.some((v) => v != null);
@@ -3103,8 +3114,10 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   // Legend
   const legendItems = !comparisonEnabled
     ? [
-      { color: "rgba(15, 118, 110, 0.32)", text: `Выручка за ${periodNoun}`, box: true },
-      { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false }
+      { color: "rgba(15, 118, 110, 0.32)", text: isRestaurantMode ? "Выручка ресторана" : `Выручка за ${periodNoun}`, box: true },
+      ...(!isRestaurantMode
+        ? [{ color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false }]
+        : [])
     ]
     : isIndexMode
     ? [
@@ -3115,11 +3128,15 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
       ? [
         { color: "rgba(15, 118, 110, 0.48)", text: `Текущий период (${periodNoun})`, box: true },
         { color: "rgba(71, 85, 105, 0.42)", text: "Предыдущий период", box: true },
-        { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false }
+        ...(!isRestaurantMode
+          ? [{ color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false }]
+          : [])
       ]
       : [
         { color: "rgba(15, 118, 110, 0.32)", text: `Выручка за ${periodNoun}`, box: true },
-        { color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false },
+        ...(!isRestaurantMode
+          ? [{ color: "#b45309", text: `Скользящее среднее (${averageWindow} ${averageLabelSuffix})`, box: false }]
+          : []),
         { color: "#475569", text: "Предыдущий период", box: false, dashed: true }
       ];
   if (groupBy === "day") {
@@ -3134,7 +3151,7 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
       index: i,
       x,
       currentLabel: currentSeries[i].label,
-      dayKey: currentSeries[i].key,
+      dayKey: groupBy === "day" ? currentSeries[i].key : null,
       currentValue: values[i] || 0,
       previousLabel: i < previousSeries.length ? previousSeries[i].label : null,
       previousValue: previousValues[i],
@@ -3170,6 +3187,19 @@ function aggregateRangeByPeriod(rows, from, to, mode) {
   return Array.from(map.values()).sort((a, b) => a.sortDate.localeCompare(b.sortDate));
 }
 
+function aggregateRangeByRestaurant(rows, from, to) {
+  const map = new Map();
+  rows.forEach((row) => {
+    if (!row || row.date === "Без даты" || row.date < from || row.date > to) return;
+    const restaurant = String(row.group || row.restaurant || "Без ресторана").trim();
+    const key = normalizeNameKey(restaurant);
+    const bucket = map.get(key) || { key, label: restaurant, total: 0 };
+    bucket.total += row.revenue;
+    map.set(key, bucket);
+  });
+  return Array.from(map.values()).sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "ru"));
+}
+
 function getMovingAverage(values, windowSize) {
   if (!Array.isArray(values) || !values.length) return [];
   const out = new Array(values.length).fill(null);
@@ -3193,6 +3223,10 @@ function getTickIndexes(length, maxTicks) {
 
 function formatChartXAxisLabel(period, mode) {
   if (!period) return "";
+  if (mode === "restaurant") {
+    const label = String(period.label);
+    return label.length > 15 ? `${label.slice(0, 14)}…` : label;
+  }
   if (mode === "month") {
     const [m, y] = String(period.label).split(".");
     return `${m}.${String(y).slice(-2)}`;

@@ -84,14 +84,70 @@ body {
   margin-top: 0;
 }
 
-.upload-panel input {
+.api-panel {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.5fr) repeat(2, minmax(150px, 0.7fr)) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.quick-periods {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quick-periods button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.quick-periods button:hover,
+.quick-periods button.is-active {
+  border-color: var(--accent);
+  background: #e8f6f2;
+  color: var(--accent);
+}
+
+.api-panel h2 {
+  margin: 0;
+}
+
+.api-panel label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.api-panel input {
   width: 100%;
 }
 
-.upload-label {
-  display: inline-block;
-  margin-bottom: 8px;
-  font-weight: 700;
+.api-panel button {
+  min-height: 42px;
+}
+
+.api-status {
+  grid-column: 1 / -1;
+  min-height: 22px;
+  color: var(--subtle);
+  font-size: 0.92rem;
+}
+
+.api-status.is-loading {
+  color: var(--accent);
+}
+
+.api-status.is-success {
+  color: #166534;
+}
+
+.api-status.is-error {
+  color: #b91c1c;
 }
 
 .hint {
@@ -788,6 +844,15 @@ body.weather-impact-off .weather-col {
   .panel.filters {
     grid-template-columns: 1fr;
   }
+
+  .api-panel {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+
+  .api-panel-copy,
+  .api-status {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 640px) {
@@ -795,11 +860,20 @@ body.weather-impact-off .weather-col {
   .stats {
     grid-template-columns: 1fr;
   }
+
+  .api-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .api-panel-copy,
+  .api-status {
+    grid-column: auto;
+  }
 }
 
 @media print {
   .bg-shape,
-  .upload-panel,
+  .api-panel,
   .filters,
   #chartSection,
   .table-controls,

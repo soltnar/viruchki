@@ -6,7 +6,7 @@ const state = {
   detailSort: "revenue_desc",
   compareOptions: [],
   chartMeta: null,
-  loadedFiles: [],
+  apiLoading: false,
   exclusionRules: [],
   showWeatherImpact: true,
   weatherByCityDate: { nn: {}, dzer: {} },
@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-05-24.71";
+const APP_VERSION = "2026-07-29.2";
 const WEEKDAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const DEBUG_LOG_KEY = "revenue_debug_log_v1";
 const EXCLUSION_RULES_KEY = "revenue_exclusion_rules_v1";
@@ -66,7 +66,10 @@ const DEFAULT_EXCLUSION_RULES = [
 ];
 
 const els = {
-  files: document.getElementById("files"),
+  apiDateFrom: document.getElementById("apiDateFrom"),
+  apiDateTo: document.getElementById("apiDateTo"),
+  loadApiData: document.getElementById("loadApiData"),
+  apiStatus: document.getElementById("apiStatus"),
   restaurantFilter: document.getElementById("restaurantFilter"),
   dateFrom: document.getElementById("dateFrom"),
   dateTo: document.getElementById("dateTo"),
@@ -123,7 +126,8 @@ initDebugLogging();
 initExclusionRules();
 initWeatherImpactToggle();
 
-els.files.addEventListener("change", handleFiles);
+els.loadApiData.addEventListener("click", loadRevenueFromApi);
+document.querySelector(".quick-periods")?.addEventListener("click", onQuickPeriodClick);
 els.restaurantFilter.addEventListener("change", applyFilters);
 els.dateFrom.addEventListener("change", applyFilters);
 els.dateTo.addEventListener("change", applyFilters);
@@ -192,6 +196,164 @@ toggleCompareCustom();
 updateComparisonUI();
 updateWarehouseActionButtons();
 updateWeatherImpactUI();
+initApiDates();
+loadRevenueFromApi();
+
+function initApiDates() {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const todayIso = dateToIso(today);
+  els.apiDateFrom.value = todayIso;
+  els.apiDateTo.value = todayIso;
+}
+
+function onQuickPeriodClick(event) {
+  const button = event.target.closest("button[data-period]");
+  if (!button) return;
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const start = new Date(today);
+  const end = new Date(today);
+  const day = (today.getDay() + 6) % 7;
+
+  switch (button.dataset.period) {
+    case "yesterday":
+      start.setDate(start.getDate() - 1);
+      end.setDate(end.getDate() - 1);
+      break;
+    case "current-week":
+      start.setDate(start.getDate() - day);
+      break;
+    case "previous-week":
+      start.setDate(start.getDate() - day - 7);
+      end.setTime(start.getTime());
+      end.setDate(end.getDate() + 6);
+      break;
+    case "current-month":
+      start.setDate(1);
+      break;
+    case "previous-month":
+      start.setMonth(start.getMonth() - 1, 1);
+      end.setDate(0);
+      break;
+    default:
+      break;
+  }
+  els.apiDateFrom.value = dateToIso(start);
+  els.apiDateTo.value = dateToIso(end);
+  document.querySelectorAll(".quick-periods button").forEach((item) => {
+    item.classList.toggle("is-active", item === button);
+  });
+  loadRevenueFromApi();
+}
+
+async function loadRevenueFromApi() {
+  if (state.apiLoading) return;
+  const from = els.apiDateFrom.value;
+  const to = els.apiDateTo.value;
+  if (!from || !to || from > to) {
+    setApiStatus("Проверьте даты периода.", "error");
+    return;
+  }
+
+  state.apiLoading = true;
+  els.loadApiData.disabled = true;
+  setApiStatus("Загружаем реализацию из Saby…", "loading");
+
+  try {
+    let response = await fetch(`/api/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+      cache: "no-store"
+    });
+    if (!response.ok && [404, 405].includes(response.status)) {
+      const manifestResponse = await fetch(`./data/index.json?t=${Date.now()}`, { cache: "no-store" });
+      if (!manifestResponse.ok) throw new Error(`Архив пока недоступен (${manifestResponse.status})`);
+      const manifest = await manifestResponse.json();
+      const months = monthsBetween(from, to);
+      const missing = months.filter(
+        (month) => !manifest.months?.some((item) => item.month === month)
+      );
+      if (missing.length) {
+        throw new Error(`В архиве пока нет периода: ${missing.join(", ")}`);
+      }
+      const monthlyPayloads = await Promise.all(
+        months.map(async (month) => {
+          const monthResponse = await fetch(`./data/${month}.json?t=${Date.now()}`, {
+            cache: "no-store"
+          });
+          if (!monthResponse.ok) throw new Error(`Не удалось прочитать архив ${month}`);
+          return monthResponse.json();
+        })
+      );
+      response = {
+        ok: true,
+        json: async () => ({
+          ...manifest,
+          rows: monthlyPayloads.flatMap((item) => item.rows || [])
+        })
+      };
+    }
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `Ошибка ${response.status}`);
+    if (!Array.isArray(payload.rows)) throw new Error("Сервис вернул данные в неизвестном формате");
+
+    const periodRows = payload.rows.filter((row) => row.date >= from && row.date <= to);
+    const validRows = periodRows
+      .map((row) => ({
+        date: String(row.date || ""),
+        restaurant: String(row.restaurant || ""),
+        revenue: Number(row.revenue),
+        source: "Saby API"
+      }))
+      .filter(
+        (row) =>
+          /^\d{4}-\d{2}-\d{2}$/.test(row.date) &&
+          row.restaurant &&
+          Number.isFinite(row.revenue) &&
+          !isBlockedRestaurantName(row.restaurant)
+      );
+
+    state.rows = aggregateRows(validRows);
+    state.expandedGroups.clear();
+    els.dateFrom.value = from;
+    els.dateTo.value = to;
+    populateRestaurantFilter(state.rows);
+    updateComparePeriodSelectors(state.rows);
+    applyFilters();
+
+    const loadedAt = payload.generatedAt
+      ? new Date(payload.generatedAt).toLocaleString("ru-RU")
+      : "ещё не выполнялось";
+    const available = payload.minDate && payload.maxDate
+      ? ` Архив: ${formatDate(payload.minDate)}–${formatDate(payload.maxDate)}.`
+      : "";
+    setApiStatus(
+      `Показано ${state.rows.length} строк. Данные обновлены ${loadedAt}.${available}`,
+      "success"
+    );
+  } catch (error) {
+    console.error(error);
+    setApiStatus(`Не удалось загрузить Saby: ${error.message || "неизвестная ошибка"}`, "error");
+  } finally {
+    state.apiLoading = false;
+    els.loadApiData.disabled = false;
+  }
+}
+
+function monthsBetween(from, to) {
+  const result = [];
+  const cursor = new Date(`${from.slice(0, 7)}-01T12:00:00`);
+  const end = new Date(`${to.slice(0, 7)}-01T12:00:00`);
+  while (cursor <= end) {
+    result.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`);
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return result;
+}
+
+function setApiStatus(message, kind = "") {
+  els.apiStatus.textContent = message;
+  els.apiStatus.className = `api-status${kind ? ` is-${kind}` : ""}`;
+}
 
 function handleFiles(event) {
   const files = Array.from(event.target.files || []);

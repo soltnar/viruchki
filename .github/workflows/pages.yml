@@ -3,10 +3,21 @@ name: Deploy Pages
 on:
   push:
     branches: ["main"]
+  schedule:
+    - cron: "0 2 * * *"
   workflow_dispatch:
+    inputs:
+      from:
+        description: "Начальная дата YYYY-MM-DD (пусто = вчера по МСК)"
+        required: false
+        type: string
+      to:
+        description: "Конечная дата YYYY-MM-DD (пусто = начальная дата)"
+        required: false
+        type: string
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -23,6 +34,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Update Saby archive
+        if: github.event_name != 'push'
+        env:
+          SABY_APP_CLIENT_ID: ${{ secrets.SABY_APP_CLIENT_ID }}
+          SABY_APP_SECRET: ${{ secrets.SABY_APP_SECRET }}
+          SABY_SERVICE_KEY: ${{ secrets.SABY_SERVICE_KEY }}
+          DATE_FROM: ${{ inputs.from }}
+          DATE_TO: ${{ inputs.to }}
+        run: node update_revenue_data.mjs "$DATE_FROM" "$DATE_TO"
+
+      - name: Save updated archive
+        if: github.event_name != 'push'
+        run: |
+          if git diff --quiet -- data; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          git commit -m "Обновить архив выручки Saby"
+          git push
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

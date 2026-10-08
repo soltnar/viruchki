@@ -19,7 +19,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-10-08.9";
+const APP_VERSION = "2026-10-08.10";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -250,12 +250,19 @@ async function applySession(session) {
     els.app.classList.add("is-hidden");
     return;
   }
-  if (email !== ALLOWED_EMAIL) {
-    await supabaseClient.auth.signOut();
-    els.authStatus.textContent = "Этот Google-аккаунт не имеет доступа.";
+  let access;
+  try { access = await window.RevenueAccess.check(supabaseClient); }
+  catch (error) {
+    els.authStatus.textContent = error.message;
     els.authStatus.className = "api-status is-error";
+    els.authGate.classList.remove("is-hidden");
+    els.app.classList.add("is-hidden");
     return;
   }
+  document.getElementById("accessPanel").hidden = !access.admin;
+  els.refreshApiData.hidden = !access.admin;
+  document.querySelector(".mobile-live-actions").hidden = !access.admin;
+  if (access.admin) window.RevenueAccess.loadList();
   els.userEmail.textContent = email;
   els.authGate.classList.add("is-hidden");
   els.app.classList.remove("is-hidden");
@@ -367,6 +374,7 @@ async function requestRevenueData(forceRefresh) {
   }
 
   state.apiLoading = true;
+  renderStats(state.filteredRows);
   els.loadApiData.disabled = true;
   els.refreshApiData.disabled = true;
   setApiStatus(forceRefresh ? "Запрашиваем свежие данные в Saby…" : "Читаем сохранённые данные…", "loading");
@@ -430,7 +438,7 @@ async function requestRevenueData(forceRefresh) {
     state.expandedGroups.clear();
     els.dateFrom.value = from;
     els.dateTo.value = to;
-    populateRestaurantFilter(state.rows);
+    populateRestaurantFilter(state.rows.filter((row) => row.date >= from && row.date <= to));
     Array.from(els.restaurantFilter.options).forEach((item) => {
       item.selected = selectedRestaurants.includes(item.value);
     });
@@ -451,6 +459,7 @@ async function requestRevenueData(forceRefresh) {
     state.apiLoading = false;
     els.loadApiData.disabled = false;
     els.refreshApiData.disabled = false;
+    renderStats(state.filteredRows);
   }
 }
 
@@ -2501,7 +2510,7 @@ function renderStats(rows) {
   els.stats.innerHTML = `
     <article class="stat">
       <p class="stat-title">Общая выручка</p>
-      <p class="stat-value">${formatMoney(total)}</p>
+      <p class="stat-value">${state.apiLoading ? "Загрузка…" : rows.length ? formatMoney(total) : "Нет данных"}</p>
     </article>
     <article class="stat">
       <p class="stat-title">Ресторанов</p>
@@ -3023,6 +3032,10 @@ function splitRestaurantName(name) {
     group = original.replace(/\s*\([^)]*\)\s*$/g, "").trim();
   }
 
+  // Confirmed rename of the same venue on 21 July 2026.
+  if (/^Самурай,\s*(БП\s*63|Б\.?\s*Покровская\s*63_П)$/i.test(group)) {
+    group = "Самурай, Б. Покровская 63_П";
+  }
   return {
     group: group || original,
     warehouse: original

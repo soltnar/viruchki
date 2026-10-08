@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20261008-9" />
+    <link rel="stylesheet" href="./styles.css?v=20261008-10" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
@@ -44,7 +44,7 @@
         <p>
           Все рестораны, кухня и бар. Выберите даты, оцените результат и сравните его с прошлым периодом.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-10-08.9</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-10-08.10</span></p>
       </header>
 
       <section id="sabySection" class="panel">
@@ -398,6 +398,13 @@
         <div id="mobileSettingsFilters"></div>
         <div id="mobileSettingsDisplay"></div>
       </section>
+      <section id="accessPanel" class="panel" hidden>
+        <h2>Доступ по почте</h2>
+        <p class="hint">Укажите почту Google для просмотра выручки. Управлять доступом и обновлять Saby может только владелец.</p>
+        <form id="accessForm"><label for="accessEmail">Почта пользователя</label><input id="accessEmail" type="email" autocomplete="email" required placeholder="name@gmail.com"><button type="submit">Разрешить просмотр</button></form>
+        <p id="accessStatus" class="hint" role="status" aria-live="polite"></p>
+        <div id="accessList"></div>
+      </section>
     </main>
     <nav class="mobile-nav" aria-label="Разделы приложения" hidden>
       <button type="button" data-section="revenueSection">Выручка</button>
@@ -416,7 +423,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./pwa.js?v=20261008-9"></script>
-    <script src="./script.js?v=20261008-9"></script>
+    <script src="./access.js?v=20261008-10"></script>
+    <script src="./pwa.js?v=20261008-10"></script>
+    <script src="./script.js?v=20261008-10"></script>
   </body>
 </html>

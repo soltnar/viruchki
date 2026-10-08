@@ -1,5 +1,5 @@
 (() => {
-  const buildVersion = '2026-10-08.9';
+  const buildVersion = '2026-10-08.10';
   let versionCheckRunning = false;
   const checkVersion = async () => {
     if (versionCheckRunning || !navigator.onLine || location.search.includes('code=') || location.hash.includes('access_token')) return;
@@ -89,6 +89,7 @@
   relocate(document.querySelector('#revenueSection > .mobile-disclosure'), document.getElementById('mobileSettingsDisplay'));
   relocate(document.getElementById('dateTotalsHeading'), document.getElementById('mobileDailyDetail'));
   relocate(document.getElementById('dateTotalsWrap'), document.getElementById('mobileDailyDetail'));
+  relocate(document.getElementById('accessPanel'), document.getElementById('mobileSettings'));
   const syncLayout = (isMobile = mobile.matches) => {
     relocations.forEach(({ element, destination, marker }) => {
       if (isMobile) destination.append(element);

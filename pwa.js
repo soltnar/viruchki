@@ -1,4 +1,25 @@
 (() => {
+  const buildVersion = '2026-10-08.9';
+  let versionCheckRunning = false;
+  const checkVersion = async () => {
+    if (versionCheckRunning || !navigator.onLine || location.search.includes('code=') || location.hash.includes('access_token')) return;
+    versionCheckRunning = true;
+    try {
+      const response = await fetch(`./app-version.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (!response.ok) return;
+      const { version } = await response.json();
+      if (typeof version === 'string' && version !== buildVersion) {
+        const url = new URL(location.href);
+        if (url.searchParams.get('build') !== version) {
+          url.searchParams.set('build', version);
+          location.replace(url.href);
+        }
+      }
+    } catch { /* Offline mode does not interrupt the current screen. */ }
+    finally { versionCheckRunning = false; }
+  };
+  window.addEventListener('pageshow', checkVersion);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   document.body.classList.toggle('standalone-app', Boolean(standalone));
   document.querySelectorAll('[data-install-help]').forEach((button) => {

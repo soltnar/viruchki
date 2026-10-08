@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20261008-2" />
+    <link rel="stylesheet" href="./styles.css?v=20261008-3" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
@@ -34,7 +34,7 @@
         <p>
           Все рестораны, кухня и бар. Выберите даты, оцените результат и сравните его с прошлым периодом.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-10-08.2</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-10-08.3</span></p>
       </header>
 
       <section id="sabySection" class="panel">
@@ -139,7 +139,9 @@
 
       <section class="panel" id="weatherImpactSection">
         <h2>Влияние погоды</h2>
-        <p class="hint">Корреляция рассчитана по дневной выручке в выбранной выборке.</p>
+        <p class="hint" id="weatherHistory">Загружаем накопленную историю для анализа погоды.</p>
+        <p class="hint" id="weatherCoverage"></p>
+        <p class="hint">Корреляция по истории последних 24 месяцев с учетом фильтров ресторанов и складов. Дни без полной погоды исключаются. Связь не доказывает влияние: сезонность, день недели и изменение состава ресторанов могут объяснять результат.</p>
         <div class="stats" id="weatherImpactStats"></div>
       </section>
 
@@ -379,6 +381,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./script.js?v=20261008-2"></script>
+    <script src="./script.js?v=20261008-3"></script>
   </body>
 </html>

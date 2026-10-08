@@ -19,7 +19,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-10-08.2";
+const APP_VERSION = "2026-10-08.3";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -172,6 +172,7 @@ els.showWeatherImpact.addEventListener("change", () => {
   saveWeatherImpactToggle();
   updateWeatherImpactUI();
   applyFilters();
+  if (state.showWeatherImpact) loadAnalyticsHistory();
 });
 els.tableBody.addEventListener("click", onTableClick);
 els.viewWarehouses.addEventListener("change", () => {
@@ -1327,9 +1328,8 @@ function applyFilters() {
 
   renderStats(state.filteredRows);
   renderComparison(baseRows, from, to);
-  updateWeatherForRows(state.filteredRows);
-  renderWeatherImpact(state.filteredRows);
   renderHistoricalAnalytics();
+  if (state.showWeatherImpact) loadAnalyticsHistory();
   renderDateTotals(state.filteredRows);
   renderTable(state.filteredRows);
   renderChart(baseRows, from, to);
@@ -1373,25 +1373,31 @@ async function loadAnalyticsHistory(force = false) {
   }
 }
 
-function renderHistoricalAnalytics() {
+function getAnalyticsRows() {
   const restaurants = Array.from(els.restaurantFilter.selectedOptions || []).map((item) => item.value);
   const kinds = Array.from(els.warehouseType.selectedOptions || []).map((item) => item.value);
   const counts = getGroupWarehouseCount(state.analyticsRows);
-  const rows = state.analyticsRows.filter((row) =>
+  return state.analyticsRows.filter((row) =>
     (!restaurants.length || restaurants.includes(row.group)) &&
     matchesWarehouseType(row, kinds, counts) && !isBlockedRestaurantName(row.warehouse)
   );
+}
+
+function renderHistoricalAnalytics() {
+  const rows = getAnalyticsRows();
   const dates = [...new Set(rows.map((row) => row.date))].sort();
   const label = state.analyticsLoading ? "Загружаем историю за последние 24 месяца…"
     : state.analyticsError ? `Не удалось загрузить историю: ${state.analyticsError}`
     : dates.length ? `История: ${formatDate(dates[0])} — ${formatDate(dates.at(-1))} · ${dates.length} дней с данными. Фильтры ресторанов и складов применены.`
     : "Раскройте блок, чтобы загрузить накопленную историю за последние 24 месяца.";
-  ["seasonalityHistory", "forecastHistory"].forEach((id) => {
+  ["seasonalityHistory", "forecastHistory", "weatherHistory"].forEach((id) => {
     const element = document.getElementById(id);
     if (element) element.textContent = label;
   });
   renderSeasonality(rows);
   renderForecast(rows);
+  updateWeatherForRows([...rows, ...state.filteredRows]);
+  renderWeatherImpact(rows);
 }
 
 function renderSeasonality(rows) {
@@ -2115,7 +2121,7 @@ function updateWeatherForRows(rows) {
   if (!dates.length) {
     state.weatherLoading = false;
     state.weatherError = "";
-    renderWeatherImpact(state.filteredRows);
+    renderWeatherImpact(getAnalyticsRows());
     return;
   }
   const cities = [...new Set(rows.map((r) => resolveWeatherCityByGroup(r.group)))];
@@ -2123,7 +2129,7 @@ function updateWeatherForRows(rows) {
   if (!missingCities.length) {
     state.weatherLoading = false;
     state.weatherError = "";
-    renderWeatherImpact(state.filteredRows);
+    renderWeatherImpact(getAnalyticsRows());
     return;
   }
 
@@ -2161,7 +2167,7 @@ function updateWeatherForRows(rows) {
         failCount
       });
     }
-    renderWeatherImpact(state.filteredRows);
+    renderWeatherImpact(getAnalyticsRows());
     renderDateTotals(state.filteredRows);
   });
 }
@@ -2172,7 +2178,7 @@ function renderWeatherImpact(rows) {
     els.weatherImpactStats.innerHTML = "";
     return;
   }
-  if (state.weatherLoading) {
+  if (state.weatherLoading || state.analyticsLoading) {
     els.weatherImpactStats.innerHTML = `
       <article class="stat">
         <p class="stat-title">Влияние погоды</p>
@@ -2182,12 +2188,14 @@ function renderWeatherImpact(rows) {
     return;
   }
   const series = buildWeatherRevenueSeries(rows);
-  if (series.length < 3) {
+  const coverage = document.getElementById("weatherCoverage");
+  if (coverage) coverage.textContent = `${series.length} дней с полной погодой и выручкой из ${new Set(rows.map((row) => row.date)).size} дней истории.${state.weatherError ? ` ${state.weatherError}.` : ""}`;
+  if (series.length < 30) {
     els.weatherImpactStats.innerHTML = `
       <article class="stat">
         <p class="stat-title">Влияние погоды</p>
         <p class="stat-value">Недостаточно данных</p>
-        <p class="stat-meta">Нужно минимум 3 дня с погодой и выручкой.</p>
+        <p class="stat-meta">Нужно минимум 30 дней истории с погодой и выручкой.${state.analyticsError ? ` ${escapeHtml(state.analyticsError)}` : ""}</p>
       </article>
     `;
     return;
@@ -2232,11 +2240,12 @@ function renderWeatherImpact(rows) {
 
 function buildWeatherRevenueSeries(rows) {
   const byDate = new Map();
+  const incompleteDates = new Set();
   rows.forEach((row) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(row.date || ""))) return;
     const city = resolveWeatherCityByGroup(row.group);
     const cityWeather = state.weatherByCityDate[city] && state.weatherByCityDate[city][row.date];
-    if (!cityWeather) return;
+    if (!cityWeather) { incompleteDates.add(row.date); return; }
     const bucket = byDate.get(row.date) || { revenue: 0, byCity: new Map() };
     bucket.revenue += row.revenue;
     const cityBucket = bucket.byCity.get(city) || { revenue: 0, weather: cityWeather };
@@ -2263,7 +2272,7 @@ function buildWeatherRevenueSeries(rows) {
       );
       return { date, revenue: bucket.revenue, ...weighted };
     })
-    .filter(Boolean)
+    .filter((row) => row && !incompleteDates.has(row.date))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -3480,9 +3489,9 @@ function updatePrintModeFlags() {
     "print-hide-forecast",
     !els.forecastDetails || !els.forecastDetails.open
   );
-  const weatherSeries = buildWeatherRevenueSeries(rowsInRange);
+  const weatherSeries = buildWeatherRevenueSeries(getAnalyticsRows());
   const hasWeatherAnalysis =
-    !state.weatherLoading && uniqueDaysInRange >= 3 && weatherSeries.length >= 3;
+    state.showWeatherImpact && !state.weatherLoading && !state.analyticsLoading && weatherSeries.length >= 30;
   document.body.classList.toggle("print-hide-weather-impact", !hasWeatherAnalysis);
 }
 

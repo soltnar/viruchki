@@ -7,6 +7,7 @@ const state = {
   compareOptions: [],
   chartMeta: null,
   apiLoading: false,
+  canRefreshRevenue: false,
   analyticsRows: [],
   analyticsHistoryKey: "",
   analyticsLoading: false,
@@ -19,7 +20,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-10-08.12";
+const APP_VERSION = "2026-10-08.13";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -260,8 +261,8 @@ async function applySession(session) {
     return;
   }
   document.getElementById("accessPanel").hidden = !access.admin;
+  state.canRefreshRevenue = Boolean(access.admin);
   els.refreshApiData.hidden = !access.admin;
-  document.querySelector(".mobile-live-actions").hidden = !access.admin;
   if (access.admin) window.RevenueAccess.loadList();
   els.userEmail.textContent = email;
   els.authGate.classList.add("is-hidden");
@@ -291,7 +292,7 @@ async function signOut() {
 function onQuickPeriodClick(event) {
   const button = event.target.closest("button[data-period]");
   if (!button) return;
-  const today = new Date();
+  const today = isoToDate(getMoscowToday());
   today.setHours(12, 0, 0, 0);
   const start = new Date(today);
   const end = new Date(today);
@@ -332,7 +333,7 @@ function onQuickPeriodClick(event) {
   document.querySelectorAll(".quick-periods button").forEach((item) => {
     item.classList.toggle("is-active", item === button);
   });
-  loadRevenueFromApi();
+  loadRevenueFromApi(true);
 }
 
 let filterDateLoadTimer = null;
@@ -352,11 +353,21 @@ function onFilterDateRangeChange() {
   });
 
   clearTimeout(filterDateLoadTimer);
-  filterDateLoadTimer = setTimeout(() => loadRevenueFromApi(), 180);
+  filterDateLoadTimer = setTimeout(() => loadRevenueFromApi(true), 180);
 }
 
-async function loadRevenueFromApi() {
-  return requestRevenueData(false);
+function getMoscowToday() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function shouldRefreshToday(from, to, today, canRefresh, autoToday) {
+  return autoToday === true && canRefresh && from === today && to === today;
+}
+
+async function loadRevenueFromApi(autoToday = false) {
+  return requestRevenueData(shouldRefreshToday(els.apiDateFrom.value, els.apiDateTo.value, getMoscowToday(), state.canRefreshRevenue, autoToday));
 }
 
 async function refreshRevenueFromSaby() {

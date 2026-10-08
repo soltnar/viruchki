@@ -1,5 +1,5 @@
 (() => {
-  const buildVersion = '2026-10-08.12';
+  const buildVersion = '2026-10-08.13';
   let versionCheckRunning = false;
   const checkVersion = async () => {
     if (versionCheckRunning || !navigator.onLine || location.search.includes('code=') || location.hash.includes('access_token')) return;
@@ -102,16 +102,10 @@
   window.addEventListener('beforeprint', () => syncLayout(false));
   window.addEventListener('afterprint', () => syncLayout());
   syncLayout();
-  const refresh = document.getElementById('mobileRefreshRevenue');
-  const originalRefresh = document.getElementById('refreshApiData');
   const status = document.getElementById('apiStatus');
-  refresh.addEventListener('click', () => originalRefresh.click());
   const syncRefresh = () => {
-    refresh.disabled = originalRefresh.disabled;
-    refresh.textContent = originalRefresh.disabled ? 'Загружаем выручку…' : 'Обновить выручку из Saby';
     document.getElementById('mobileRevenueStatus').textContent = status.textContent.trim();
   };
-  new MutationObserver(syncRefresh).observe(originalRefresh, { attributes: true, attributeFilter: ['disabled'] });
   new MutationObserver(syncRefresh).observe(status, { childList: true, subtree: true, characterData: true });
   syncRefresh();
   const syncNetwork = () => { document.getElementById('networkStatus').hidden = navigator.onLine; };

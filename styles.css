@@ -1066,6 +1066,84 @@ dialog li { margin: 12px 0; line-height: 1.5; }
   .mobile-picker input { width: 20px; height: 20px; flex-shrink: 0; }
 }
 
+.mobile-disclosure > summary { display: none; }
+@media screen and (max-width: 700px) {
+  html { -webkit-text-size-adjust: 100%; }
+  body { background: #f4f6fa; font-family: -apple-system, BlinkMacSystemFont, "Manrope", sans-serif; }
+  .container { gap: 12px; margin-bottom: 20px; }
+  .hero { padding: 16px 18px; border-radius: 16px; }
+  .hero h1 { font-size: 24px; letter-spacing: -.7px; margin: 0; }
+  .hero > .eyebrow, .hero > p:not(.eyebrow):not(.hint), .hero > .hint { display: none; }
+  .hero-account { margin: 0 0 12px; flex-wrap: nowrap; gap: 10px; }
+  .hero-account #userEmail { flex: 1; font-size: 11px; }
+  .hero-account button { min-height: 32px; font-size: 12px; padding: 6px 10px; }
+  .panel { padding: 16px; border-radius: 16px; }
+  h2, .collapsible-summary h2 { font-size: 18px; margin-top: 0; }
+  h3 { font-size: 15px; }
+  .hint { font-size: 12px; line-height: 1.5; }
+  body[data-mobile-view] #app > section { display: none; }
+  body[data-mobile-view="period"] #app > .panel.filters,
+  body[data-mobile-view="period"] #app > #stats,
+  body[data-mobile-view="period"] #app > #sabySection,
+  body[data-mobile-view="compare"] #app > #compareSection,
+  body[data-mobile-view="revenue"] #app > #revenueSection,
+  body[data-mobile-view="revenue"] #app > #chartSection,
+  body[data-mobile-view="analytics"] #app > #weatherImpactSection,
+  body[data-mobile-view="analytics"] #app > #seasonalitySection,
+  body[data-mobile-view="analytics"] #app > #forecastSection { display: block; }
+  body[data-mobile-view="period"] #app > #stats { display: grid; order: -1; grid-template-columns: 1fr 1fr; border: 0; padding: 0; background: transparent; }
+  .hero { order: -2; }
+  body.weather-impact-off[data-mobile-view="analytics"] #app > #weatherImpactSection { display: none; }
+  #stats .stat:first-child { grid-column: 1 / -1; background: #142c3d; color: #fff; }
+  #stats .stat:first-child .stat-title { color: #b8cbd8; }
+  .stat { padding: 14px; }
+  .stat-title { font-size: 12px; margin: 0 0 8px; }
+  .stat-value { font-size: 23px; margin: 0; line-height: 1.3; }
+  .stat-meta { font-size: 12px; margin: 8px 0 0; line-height: 1.5; }
+  #compareStats { gap: 8px; }
+  #compareStats .stat-value { font-size: 22px; }
+  .compare-header > div { display: none; }
+  #compareMode { font-weight: 500; }
+  input, select { color: #172a3a; background-color: #fff; }
+  button { -webkit-appearance: none; color: #087f75; }
+  select { width: 100%; max-width: 100%; text-overflow: ellipsis; }
+  .mobile-nav { padding-top: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom)); box-shadow: 0 -2px 14px #142c3d0a; }
+  .mobile-nav button { background: transparent; color: #728092; min-height: 44px; border-radius: 10px; font-size: 12px; }
+  .mobile-nav button.is-active { color: #087f75; background: #e4f4ef; }
+  .mobile-disclosure { margin: 10px 0 14px; }
+  .mobile-disclosure > summary { display: block; color: #087f75; font-size: 13px; padding: 12px; border: 1px solid #e1e7ef; border-radius: 10px; background: #f7f9fb; cursor: pointer; }
+  .mobile-disclosure > summary::after { content: "＋"; float: right; }
+  .mobile-disclosure[open] > summary::after { content: "−"; }
+  .mobile-disclosure[open] > :not(summary) { margin-top: 12px; }
+  .mobile-disclosure .chart-controls > h2 { display: none; }
+  #detailTable, #dateTotalsTable { min-width: 0; width: 100%; }
+  #detailTable thead, #dateTotalsTable thead { display: none; }
+  #detailTable, #detailTable tbody, #dateTotalsTable, #dateTotalsTable tbody { display: block; }
+  #detailTable tr, #dateTotalsTable tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 12px; border-bottom: 1px solid var(--line); gap: 6px 10px; }
+  #detailTable td, #dateTotalsTable td { display: block; border: 0; padding: 0; background: transparent; font-size: 13px; white-space: normal; text-align: left; overflow-wrap: anywhere; }
+  #detailTable td:first-child { grid-column: 1 / -1; font-size: 11px; color: #728092; }
+  #detailTable td:nth-child(2) { min-width: 0; }
+  #detailTable td:last-child { text-align: right; white-space: nowrap; font-size: 13px; }
+  #dateTotalsTable td:last-child { grid-column: 1 / -1; font-size: 12px; color: #728092; }
+  #detailTable .empty { grid-column: 1 / -1; }
+  .group-toggle { text-align: left; white-space: normal; overflow-wrap: anywhere; }
+  .table-wrap { max-height: none; overflow: visible; }
+  .seasonality-grid .table-wrap { overflow-x: auto; }
+  .seasonality-grid td, #forecastSection td { font-size: 12px; padding: 9px 6px; }
+  .seasonality-grid th, #forecastSection th { font-size: 11px; padding: 8px 6px; }
+  #forecastStats .stat:first-child .stat-value { font-size: 17px; }
+  #weatherImpactStats { grid-template-columns: 1fr 1fr; gap: 8px; }
+  #weatherImpactStats .stat:last-child { grid-column: 1 / -1; }
+  #weatherImpactStats .stat-value { font-size: 22px; }
+  #weatherImpactStats .stat-title { font-size: 11px; }
+  .forecast-filters > .filter-group:last-child > label { display: none; }
+  .forecast-filters button { font-size: 14px; }
+  #expandAllRows:disabled, #collapseAllRows:disabled { display: none; }
+  #chartSection::before { content: "Динамика выручки"; display: block; font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+  #chart { height: 310px; }
+  #sabySection { order: 4; }
+}
+
 @media print {
   .bg-shape,
   .mobile-nav,

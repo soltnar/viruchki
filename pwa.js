@@ -10,13 +10,50 @@
   const syncNav = () => { nav.hidden = app.classList.contains('is-hidden'); };
   new MutationObserver(syncNav).observe(app, { attributes: true, attributeFilter: ['class'] });
   syncNav();
+  const mobile = window.matchMedia('(max-width: 700px)');
+  const views = { app: 'period', compareSection: 'compare', revenueSection: 'revenue', seasonalitySection: 'analytics' };
+  const showView = (view) => {
+    document.body.dataset.mobileView = view;
+    nav.querySelectorAll('button').forEach((button) => {
+      const active = views[button.dataset.section] === view;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-current', active ? 'page' : 'false');
+    });
+  };
+  showView('period');
   nav.addEventListener('click', (event) => {
     const button = event.target.closest('[data-section]');
     if (!button) return;
-    const section = document.getElementById(button.dataset.section);
-    if (button.dataset.section === 'seasonalitySection') section.querySelector('details').open = true;
-    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showView(views[button.dataset.section]);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   });
+  const disclosures = [];
+  const fold = (element, title) => {
+    if (!element) return;
+    const details = document.createElement('details');
+    details.className = 'mobile-disclosure';
+    const summary = document.createElement('summary');
+    summary.textContent = title;
+    element.before(details);
+    details.append(summary, element);
+    disclosures.push(details);
+  };
+  fold(document.querySelector('#revenueSection .table-controls'), 'Настройки списка и экспорт');
+  fold(document.querySelector('#chartSection .chart-controls'), 'Настройки графика');
+  ['weatherImpactSection', 'seasonalitySection', 'forecastSection'].forEach((id) => {
+    const section = document.getElementById(id);
+    const hints = [...section.querySelectorAll('.collapsible-content > .hint, :scope > .hint')]
+      .filter((element) => !element.id);
+    if (!hints.length) return;
+    const content = document.createElement('div');
+    hints[0].before(content);
+    hints.forEach((hint) => content.append(hint));
+    fold(content, 'Как рассчитывается');
+  });
+  const syncDisclosures = () => disclosures.forEach((details) => { details.open = !mobile.matches; });
+  mobile.addEventListener('change', syncDisclosures);
+  syncDisclosures();
   const syncNetwork = () => { document.getElementById('networkStatus').hidden = navigator.onLine; };
   window.addEventListener('online', syncNetwork);
   window.addEventListener('offline', syncNetwork);

@@ -19,7 +19,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-10-08.5";
+const APP_VERSION = "2026-10-08.6";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -3075,8 +3075,10 @@ function renderChart(baseRows, from, to) {
 
 function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, compareView) {
   const canvas = els.chart;
+  canvas.style.width = "100%";
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
   const width = Math.max(1, Math.floor(rect.width));
   const height = Math.max(1, Math.floor(rect.height));
 
@@ -3108,7 +3110,8 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
     return null;
   }
 
-  const padding = { top: 54, right: 16, bottom: 30, left: 74 };
+  const compactChart = width < 600;
+  const padding = { top: compactChart ? 108 : 54, right: 16, bottom: 30, left: compactChart ? 62 : 74 };
   const plotW = width - padding.left - padding.right;
   const plotH = height - padding.top - padding.bottom;
   const metricPool = [
@@ -3269,19 +3272,23 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
   if (isIndexMode) {
     const maxIdxVal = currentIndexed[maxIndex] == null ? 0 : currentIndexed[maxIndex];
     const minIdxVal = currentIndexed[minIndex] == null ? 0 : currentIndexed[minIndex];
-    ctx.fillText(`MAX: ${formatPercent(maxIdxVal)} (${currentSeries[maxIndex].label})`, padding.left, 14);
-    ctx.fillText(`MIN: ${formatPercent(minIdxVal)} (${currentSeries[minIndex].label})`, padding.left, 30);
-    ctx.fillText("БАЗА ИНДЕКСА: первая точка периода = 100%", padding.left, 46);
+    ctx.fillText(compactChart ? "Индекс · первая точка = 100%" : `MAX: ${formatPercent(maxIdxVal)} (${currentSeries[maxIndex].label})`, padding.left, 14);
+    if (!compactChart) {
+      ctx.fillText(`MIN: ${formatPercent(minIdxVal)} (${currentSeries[minIndex].label})`, padding.left, 30);
+      ctx.fillText("БАЗА ИНДЕКСА: первая точка периода = 100%", padding.left, 46);
+    }
   } else {
-    const maxLabel = `MAX: ${formatMoneyCompact(maxValue)} (${currentSeries[maxIndex].label})`;
+    const maxLabel = compactChart ? `Итого: ${formatMoneyCompact(total)}` : `MAX: ${formatMoneyCompact(maxValue)} (${currentSeries[maxIndex].label})`;
     const minLabel = `MIN: ${formatMoneyCompact(minValue)} (${currentSeries[minIndex].label})`;
     ctx.fillText(maxLabel, padding.left, 14);
-    ctx.fillText(minLabel, padding.left, 30);
-    ctx.fillText(`СРЕДНЕЕ: ${formatMoneyCompact(avg)} | ИТОГО: ${formatMoneyCompact(total)}`, padding.left, 46);
+    if (!compactChart) {
+      ctx.fillText(minLabel, padding.left, 30);
+      ctx.fillText(`СРЕДНЕЕ: ${formatMoneyCompact(avg)} | ИТОГО: ${formatMoneyCompact(total)}`, padding.left, 46);
+    }
   }
 
   // X labels
-  const ticks = getTickIndexes(labels.length, 6);
+  const ticks = getTickIndexes(labels.length, compactChart ? 4 : 6);
   ctx.fillStyle = "#1d2a21";
   ctx.font = "11px Manrope";
   ticks.forEach((idx) => {
@@ -3317,7 +3324,7 @@ function drawRevenueChart(ctx, currentSeries, previousSeries, ranges, groupBy, c
     legendItems.push({ color: "rgba(37, 99, 235, 0.25)", text: "Выходные", box: true });
     legendItems.push({ color: "rgba(185, 28, 28, 0.25)", text: "Праздники", box: true });
   }
-  drawLegend(ctx, Math.max(padding.left + 6, width - padding.right - 285), 10, legendItems);
+  drawLegend(ctx, compactChart ? padding.left : Math.max(padding.left + 6, width - padding.right - 285), compactChart ? 25 : 10, legendItems);
 
   const points = labels.map((_, i) => {
     const x = labels.length === 1 ? padding.left + plotW / 2 : padding.left + i * stepX;

@@ -2,12 +2,20 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#142c3d" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Выручка" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <title>Выручка ресторанов</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20261008-4" />
+    <link rel="stylesheet" href="./styles.css?v=20261008-5" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
@@ -20,6 +28,7 @@
         <p>Доступ к финансовым данным защищён. Войдите разрешённым аккаунтом Google.</p>
         <button id="googleLogin" type="button" class="google-login">Войти через Google</button>
         <div id="authStatus" class="api-status" role="status" aria-live="polite"></div>
+        <button type="button" class="secondary-button" data-install-help>Установить на iPhone</button>
       </div>
     </section>
 
@@ -28,13 +37,14 @@
         <div class="hero-account">
           <span id="userEmail"></span>
           <button id="logout" type="button" class="secondary-button">Выйти</button>
+          <button type="button" class="secondary-button" data-install-help>На главный экран</button>
         </div>
         <p class="eyebrow">РЕСТОРАНЫ · АНАЛИТИКА</p>
         <h1>Выручка и динамика</h1>
         <p>
           Все рестораны, кухня и бар. Выберите даты, оцените результат и сравните его с прошлым периодом.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-10-08.4</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-10-08.5</span></p>
       </header>
 
       <section id="sabySection" class="panel">
@@ -378,9 +388,24 @@
         </div>
       </section>
     </main>
+    <nav class="mobile-nav" aria-label="Разделы приложения" hidden>
+      <button type="button" data-section="app">Период</button>
+      <button type="button" data-section="compareSection">Сравнение</button>
+      <button type="button" data-section="revenueSection">Выручка</button>
+      <button type="button" data-section="seasonalitySection">Аналитика</button>
+    </nav>
+    <dialog id="installHelp" aria-labelledby="installTitle">
+      <h2 id="installTitle">Выручка на iPhone</h2>
+      <p>Откройте этот сайт в Safari.</p>
+      <ol><li>Нажмите «Поделиться».</li><li>Выберите «На экран Домой».</li><li>Если есть переключатель «Открывать как веб-приложение», включите его и нажмите «Добавить».</li></ol>
+      <p class="hint">Запускайте с новой иконки. При первом запуске может потребоваться войти через Google. Для загрузки выручки нужен интернет.</p>
+      <form method="dialog"><button>Понятно</button></form>
+    </dialog>
+    <p id="networkStatus" class="network-status" role="status" hidden>Нет интернета. Для загрузки данных восстановите соединение.</p>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./script.js?v=20261008-4"></script>
+    <script src="./pwa.js?v=20261008-5"></script>
+    <script src="./script.js?v=20261008-5"></script>
   </body>
 </html>

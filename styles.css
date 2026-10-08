@@ -1024,8 +1024,54 @@ body.weather-impact-off .weather-col {
   }
 }
 
+.mobile-nav, .mobile-picker { display: none; }
+dialog { width: min(420px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 20px; padding: 24px; color: var(--ink); }
+dialog::backdrop { background: #142c3d80; }
+dialog li { margin: 12px 0; line-height: 1.5; }
+.network-status { position: fixed; top: env(safe-area-inset-top, 0px); left: 12px; right: 12px; z-index: 100; padding: 14px; background: #fff2d8; color: #754500; border-radius: 12px; box-shadow: 0 4px 20px #0002; }
+[hidden] { display: none !important; }
+@media screen and (max-width: 700px) {
+  body { padding-top: env(safe-area-inset-top, 0px); padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  .container { width: calc(100% - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)); }
+  .panel { min-width: 0; scroll-margin-top: 16px; }
+  button, input, select, summary { touch-action: manipulation; }
+  input:not([type="checkbox"]), select, button { min-height: 44px; font-size: 16px; }
+  input[type="date"] { width: 100%; min-width: 0; -webkit-appearance: none; }
+  .data-range-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding: 10px; gap: 8px; }
+  .hero-account { flex-wrap: wrap; font-size: 11px; }
+  .hero-account #userEmail { flex: 1 1 100%; overflow-wrap: anywhere; }
+  .hero > p:not(.eyebrow):not(.hint) { font-size: 13px; line-height: 1.5; }
+  .controls-row { align-items: stretch; }
+  .controls-row > .table-toggle { width: 100%; display: flex; flex-wrap: wrap; }
+  .controls-row button { flex: 1 1 130px; margin-left: 0 !important; }
+  .table-toggle select { width: 100%; min-width: 0; }
+  .chart-controls { display: grid; grid-template-columns: 1fr; }
+  .chart-controls .table-toggle { display: grid; gap: 6px; }
+  #chart { height: 300px; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #detailTable { min-width: 480px; }
+  #dateTotalsTable { min-width: 440px; }
+  .stat-value { overflow-wrap: anywhere; font-size: 24px; }
+  .stat { padding: 16px; }
+  .seasonality-grid { grid-template-columns: 1fr; }
+  #compareSection .compare-header { flex-wrap: wrap; gap: 12px; }
+  .mobile-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; background: #fff; border-top: 1px solid var(--line); padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)); gap: 4px; box-shadow: 0 -4px 18px #142c3d08; }
+  .mobile-nav button { flex: 1; min-width: 0; padding: 10px 3px; font-size: 11px; border: 0; background: #f1f6f7; color: #142c3d; font-weight: 700; }
+  #restaurantFilter, #warehouseType { display: none; }
+  #restaurantFilter ~ .hint, #warehouseType ~ .hint { display: none; }
+  .mobile-picker { display: block; border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .mobile-picker summary { min-height: 30px; cursor: pointer; font-weight: 700; }
+  .mobile-picker > div { max-height: 320px; overflow-y: auto; margin-top: 10px; }
+  .mobile-picker label { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; border-bottom: 1px solid var(--line); }
+  .mobile-picker input { width: 20px; height: 20px; flex-shrink: 0; }
+}
+
 @media print {
   .bg-shape,
+  .mobile-nav,
+  .mobile-picker,
+  .network-status,
+  #installHelp,
   .hero,
   #sabySection,
   .api-panel,

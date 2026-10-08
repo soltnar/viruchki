@@ -19,7 +19,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-10-08.3";
+const APP_VERSION = "2026-10-08.4";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -2207,6 +2207,7 @@ function renderWeatherImpact(rows) {
   const cTemp = calcCorrelation(rev, temps);
   const cPrec = calcCorrelation(rev, prec);
   const cCloud = calcCorrelation(rev, cloud);
+  const adjusted = adjustedWeatherCorrelations(rows);
   const lead = [
     { title: "Температура ↔ выручка", value: cTemp },
     { title: "Осадки ↔ выручка", value: cPrec },
@@ -2216,24 +2217,24 @@ function renderWeatherImpact(rows) {
 
   els.weatherImpactStats.innerHTML = `
     <article class="stat">
-      <p class="stat-title">Корреляция: температура</p>
-      <p class="stat-value">${formatCorrelation(cTemp)}</p>
-      <p class="stat-meta">${describeCorrelation(cTemp)}</p>
+      <p class="stat-title">Температура · скорректированная связь</p>
+      <p class="stat-value">${adjusted ? formatCorrelation(adjusted.temp) : "Мало данных"}</p>
+      <p class="stat-meta">Исходная: ${formatCorrelation(cTemp)}. ${adjusted ? describeCorrelation(adjusted.temp) : "Нужно минимум 90 дней"}</p>
     </article>
     <article class="stat">
-      <p class="stat-title">Корреляция: осадки</p>
-      <p class="stat-value">${formatCorrelation(cPrec)}</p>
-      <p class="stat-meta">${describeCorrelation(cPrec)}</p>
+      <p class="stat-title">Осадки · скорректированная связь</p>
+      <p class="stat-value">${adjusted ? formatCorrelation(adjusted.precip) : "Мало данных"}</p>
+      <p class="stat-meta">Исходная: ${formatCorrelation(cPrec)}. ${adjusted ? describeCorrelation(adjusted.precip) : "Нужно минимум 90 дней"}</p>
     </article>
     <article class="stat">
-      <p class="stat-title">Корреляция: облачность</p>
-      <p class="stat-value">${formatCorrelation(cCloud)}</p>
-      <p class="stat-meta">${describeCorrelation(cCloud)}</p>
+      <p class="stat-title">Облачность · скорректированная связь</p>
+      <p class="stat-value">${adjusted ? formatCorrelation(adjusted.cloud) : "Мало данных"}</p>
+      <p class="stat-meta">Исходная: ${formatCorrelation(cCloud)}. ${adjusted ? describeCorrelation(adjusted.cloud) : "Нужно минимум 90 дней"}</p>
     </article>
     <article class="stat">
-      <p class="stat-title">Самый сильный фактор</p>
-      <p class="stat-value">${escapeHtml(lead.title)}</p>
-      <p class="stat-meta">${describeCorrelation(lead.value)} (${formatCorrelation(lead.value)})</p>
+      <p class="stat-title">Контроль календарных факторов</p>
+      <p class="stat-value">${adjusted ? `${adjusted.days} дней` : "Недостаточно истории"}</p>
+      <p class="stat-meta">Ресторан, день недели, месяц каждого года, праздники и тренд. Связь не означает причинное влияние.</p>
     </article>
   `;
 }
@@ -2258,11 +2259,10 @@ function buildWeatherRevenueSeries(rows) {
   return Array.from(byDate.entries())
     .map(([date, bucket]) => {
       const cityEntries = Array.from(bucket.byCity.values());
-      const sumRev = cityEntries.reduce((s, c) => s + c.revenue, 0);
-      if (!sumRev) return null;
+      if (!cityEntries.length) return null;
       const weighted = cityEntries.reduce(
         (acc, c) => {
-          const w = c.revenue / sumRev;
+          const w = 1 / cityEntries.length;
           acc.temp += (Number(c.weather.tempDay) || 0) * w;
           acc.precip += (Number(c.weather.precip) || 0) * w;
           acc.cloud += (Number(c.weather.cloud) || 0) * w;
@@ -2274,6 +2274,64 @@ function buildWeatherRevenueSeries(rows) {
     })
     .filter((row) => row && !incompleteDates.has(row.date))
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function adjustedWeatherCorrelations(rows) {
+  const buckets = new Map();
+  rows.forEach((row) => {
+    const weather = state.weatherByCityDate[resolveWeatherCityByGroup(row.group)]?.[row.date];
+    if (!weather || !Number.isFinite(row.revenue)) return;
+    const key = `${row.date}|${row.group}`;
+    const item = buckets.get(key) || { date: row.date, group: row.group, revenue: 0, ...weather };
+    item.revenue += row.revenue;
+    buckets.set(key, item);
+  });
+  const observations = [...buckets.values()].filter((item) => item.revenue > 0);
+  const days = new Set(observations.map((item) => item.date)).size;
+  if (days < 90) return null;
+  const controls = observations.map((item) => [
+    item.group, isoToDate(item.date).getDay(), item.date.slice(0, 7),
+    getSpecialDayInfo(item.date).holiday ? "holiday" : "ordinary"
+  ]);
+  const time = observations.map((item) => Date.parse(item.date) / 86400000);
+  const revenue = removeWeatherControls(observations.map((item) => Math.log(item.revenue)), controls, time);
+  const result = { days };
+  for (const [key, field] of [["temp", "tempDay"], ["precip", "precip"], ["cloud", "cloud"]]) {
+    const residual = removeWeatherControls(observations.map((item) => Number(item[field]) || 0), controls, time);
+    const variance = residual.reduce((sum, value) => sum + value * value, 0);
+    result[key] = variance < 1e-10 ? 0 : calcCorrelation(revenue, residual);
+  }
+  return result;
+}
+
+function removeWeatherControls(values, controls, time) {
+  const residual = [...values];
+  const meanTime = time.reduce((sum, value) => sum + value, 0) / time.length;
+  const trend = time.map((value) => value - meanTime);
+  const channels = [residual, trend];
+  // Alternating projections remove additive categorical effects and linear trend.
+  for (let iteration = 0; iteration < 200; iteration++) {
+    const before = [...residual];
+    for (const channel of channels) {
+    for (let column = 0; column < controls[0].length; column++) {
+      const groups = new Map();
+      controls.forEach((row, index) => {
+        const group = groups.get(row[column]) || { sum: 0, count: 0 };
+        group.sum += channel[index]; group.count++;
+        groups.set(row[column], group);
+      });
+      controls.forEach((row, index) => {
+        const group = groups.get(row[column]);
+        channel[index] -= group.sum / group.count;
+      });
+    }
+    }
+    if (Math.max(...residual.map((value, index) => Math.abs(value - before[index]))) < 1e-8) break;
+  }
+  const trendVariance = trend.reduce((sum, value) => sum + value * value, 0);
+  const slope = trendVariance > 1e-10 ? residual.reduce((sum, value, index) => sum + value * trend[index], 0) / trendVariance : 0;
+  residual.forEach((value, index) => { residual[index] = value - slope * trend[index]; });
+  return residual;
 }
 
 function calcCorrelation(xs, ys) {

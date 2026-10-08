@@ -1,5 +1,5 @@
 (() => {
-  const buildVersion = '2026-10-08.10';
+  const buildVersion = '2026-10-08.11';
   let versionCheckRunning = false;
   const checkVersion = async () => {
     if (versionCheckRunning || !navigator.onLine || location.search.includes('code=') || location.hash.includes('access_token')) return;
@@ -35,6 +35,8 @@
   const views = { compareSection: 'compare', revenueSection: 'revenue', seasonalitySection: 'analytics', mobileSettings: 'settings' };
   const showView = (view) => {
     document.body.dataset.mobileView = view;
+    const titles = { revenue: 'Выручка', compare: 'Сравнение периодов', analytics: 'Аналитика', settings: 'Настройки' };
+    document.querySelector('.hero h1').textContent = titles[view];
     nav.querySelectorAll('button').forEach((button) => {
       const active = views[button.dataset.section] === view;
       button.classList.toggle('is-active', active);
@@ -90,7 +92,7 @@
   relocate(document.getElementById('dateTotalsHeading'), document.getElementById('mobileDailyDetail'));
   relocate(document.getElementById('dateTotalsWrap'), document.getElementById('mobileDailyDetail'));
   relocate(document.getElementById('accessPanel'), document.getElementById('mobileSettings'));
-  const syncLayout = (isMobile = mobile.matches) => {
+  const syncLayout = (isMobile = true) => {
     relocations.forEach(({ element, destination, marker }) => {
       if (isMobile) destination.append(element);
       else marker.after(element);

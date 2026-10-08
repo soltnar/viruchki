@@ -1067,6 +1067,7 @@ dialog li { margin: 12px 0; line-height: 1.5; }
 }
 
 .mobile-disclosure > summary { display: none; }
+.sidebar-brand, .sidebar-caption { display: none; }
 .mobile-live-actions { display: none; }
 .mobile-only-panel { display: none; }
 #accessForm { display: grid; gap: 10px; margin-top: 16px; }
@@ -1165,6 +1166,78 @@ dialog li { margin: 12px 0; line-height: 1.5; }
   #chartSection::before { content: "Динамика выручки"; display: block; font-size: 18px; font-weight: 700; margin-bottom: 12px; }
   #chart { height: 310px; }
   #sabySection { order: 4; }
+}
+
+@media screen and (min-width: 701px) {
+  body { background: #f5f7fa; font-family: "Manrope", -apple-system, sans-serif; }
+  .container { width: auto; max-width: 1400px; margin: 0 32px 40px 264px; padding-top: 24px; gap: 18px; }
+  .mobile-nav { display: flex; flex-direction: column; position: fixed; inset: 0 auto 0 0; width: 232px; padding: 28px 16px; background: #142c3d; border: 0; gap: 8px; z-index: 50; }
+  .sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 0 10px 32px; color: #fff; }
+  .sidebar-brand > span { display: grid; place-items: center; background: #087f75; border-radius: 12px; width: 42px; height: 42px; font-size: 24px; font-weight: 800; }
+  .sidebar-brand strong { font-size: 20px; }
+  .sidebar-brand small { display: block; font-size: 10px; font-weight: 500; color: #9cb5c3; margin-top: 3px; }
+  .mobile-nav button { min-height: 48px; text-align: left; padding: 12px 16px; border: 0; border-radius: 10px; background: transparent; color: #b8cbd8; font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
+  .mobile-nav button:hover { background: #ffffff0d; color: #fff; }
+  .mobile-nav button.is-active { background: #25505b; color: #fff; }
+  .mobile-nav button::before { width: 22px; font-size: 20px; text-align: center; }
+  .mobile-nav button[data-section="revenueSection"]::before { content: "₽"; }
+  .mobile-nav button[data-section="compareSection"]::before { content: "⇄"; }
+  .mobile-nav button[data-section="seasonalitySection"]::before { content: "▥"; }
+  .mobile-nav button[data-section="mobileSettings"]::before { content: "⚙"; }
+  .sidebar-caption { display: block; color: #91aebb; font-size: 11px; line-height: 1.8; margin: auto 12px 0; }
+  .hero { order: -3; padding: 8px 0 20px; background: transparent; color: #172a3a; border-radius: 0; border-bottom: 1px solid var(--line); }
+  .hero h1 { font-size: 28px; letter-spacing: -.8px; margin: 0; }
+  .hero > p { display: none; }
+  .hero-account { float: right; color: #687787; }
+  .hero-account button { min-height: 36px; }
+  .panel { padding: 22px; border-radius: 14px; box-shadow: 0 2px 12px #142c3d03; }
+  body[data-mobile-view] #app > section { display: none; }
+  body[data-mobile-view="revenue"] #app > .panel.filters,
+  body[data-mobile-view="compare"] #app > .panel.filters,
+  body[data-mobile-view="revenue"] #app > #revenueSection,
+  body[data-mobile-view="compare"] #app > #compareSection,
+  body[data-mobile-view="analytics"] #app > #chartSection,
+  body[data-mobile-view="analytics"] #app > #mobileDailyDetail,
+  body[data-mobile-view="analytics"] #app > #weatherImpactSection,
+  body[data-mobile-view="analytics"] #app > #seasonalitySection,
+  body[data-mobile-view="analytics"] #app > #forecastSection,
+  body[data-mobile-view="settings"] #app > #mobileSettings,
+  body[data-mobile-view="settings"] #app > #sabySection { display: block; }
+  body.weather-impact-off[data-mobile-view="analytics"] #app > #weatherImpactSection { display: none; }
+  body[data-mobile-view="revenue"] #app > .panel.filters,
+  body[data-mobile-view="compare"] #app > .panel.filters { display: grid; grid-template-columns: 1.2fr 1fr; order: -2; gap: 16px 24px; }
+  .panel.filters .section-title { display: none; }
+  .panel.filters .quick-periods { grid-column: 1 / -1; }
+  .panel.filters .data-range-group { grid-column: auto; }
+  #restaurantFilter { height: 108px; min-height: 108px; }
+  body[data-mobile-view="revenue"] #app > #stats { display: grid; order: 0; padding: 0; background: transparent; border: 0; grid-template-columns: 2fr 1fr 1fr; gap: 16px; }
+  #stats .stat:first-child { background: #142c3d; color: #fff; }
+  #stats .stat:first-child .stat-title { color: #b8cbd8; }
+  #stats .stat { padding: 22px; }
+  #stats .stat-value { font-size: 30px; }
+  .mobile-live-actions { display: none; }
+  body[data-mobile-view="revenue"] .mobile-live-actions:not([hidden]) { display: flex; align-items: center; gap: 16px; order: 0; }
+  #mobileRefreshRevenue { background: #087f75; color: #fff; padding: 12px 20px; }
+  #mobileSettingsFilters { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+  #mobileSettingsDisplay { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  #accessPanel { margin-top: 28px; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; padding: 24px 0 0; }
+  #accessForm { grid-template-columns: minmax(220px, 440px) auto; max-width: 680px; align-items: end; }
+  #accessForm label { grid-column: 1 / -1; font-size: 12px; color: var(--subtle); }
+  button, input:not([type="checkbox"]), select { -webkit-appearance: none; min-height: 42px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; font-size: 14px; background: #fff; color: #172a3a; }
+  select { appearance: auto; }
+  #accessForm button { background: #087f75; color: #fff; border: 0; font-weight: 700; }
+  .access-row { max-width: 680px; }
+  #compareStats .stat-value { font-size: clamp(20px, 2vw, 28px); }
+  .stat-title { line-height: 1.5; }
+  .mobile-disclosure { margin: 0; }
+  @media (max-width: 1000px) {
+    .mobile-nav { width: 190px; }
+    .container { margin-left: 214px; margin-right: 20px; }
+    #mobileSettingsFilters, body[data-mobile-view="revenue"] #app > .panel.filters, body[data-mobile-view="compare"] #app > .panel.filters { grid-template-columns: 1fr; }
+    .data-range-group { grid-column: 1 / -1; }
+    .hero-account { float: none; margin-bottom: 16px; }
+    #compareStats { grid-template-columns: 1fr; }
+  }
 }
 
 @media print {

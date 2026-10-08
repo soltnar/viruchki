@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20261008-11" />
+    <link rel="stylesheet" href="./styles.css?v=20261008-12" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
@@ -44,7 +44,7 @@
         <p>
           Все рестораны, кухня и бар. Выберите даты, оцените результат и сравните его с прошлым периодом.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-10-08.11</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-10-08.12</span></p>
       </header>
 
       <section id="sabySection" class="panel">
@@ -334,6 +334,17 @@
 
       <section class="panel" id="revenueSection">
         <h2 class="screen-only-heading">Таблица выручки</h2>
+        <div class="revenue-grouping">
+          <label for="detailGroupBy">Итоги ресторанов</label>
+          <select id="detailGroupBy">
+            <option value="total" selected>За весь выбранный период</option>
+            <option value="day">По дням</option>
+            <option value="week">По неделям</option>
+            <option value="month">По месяцам</option>
+            <option value="year">По годам</option>
+          </select>
+          <span class="hint">Суммы только за выбранные даты</span>
+        </div>
         <div class="table-controls">
           <div class="controls-row">
             <label class="table-toggle">
@@ -350,14 +361,6 @@
                 <option value="revenue_desc">Сначала больше выручка</option>
                 <option value="name_asc">Название: А → Я</option>
                 <option value="name_desc">Название: Я → А</option>
-              </select>
-            </label>
-            <label class="table-toggle" for="detailGroupBy">
-              Группировка
-              <select id="detailGroupBy">
-                <option value="day">По дням</option>
-                <option value="week">По неделям</option>
-                <option value="month">По месяцам</option>
               </select>
             </label>
             <button id="exportExcel" type="button">Экспорт в Excel</button>
@@ -425,8 +428,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./access.js?v=20261008-11"></script>
-    <script src="./pwa.js?v=20261008-11"></script>
-    <script src="./script.js?v=20261008-11"></script>
+    <script src="./access.js?v=20261008-12"></script>
+    <script src="./pwa.js?v=20261008-12"></script>
+    <script src="./script.js?v=20261008-12"></script>
   </body>
 </html>

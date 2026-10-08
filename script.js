@@ -19,7 +19,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-10-08.11";
+const APP_VERSION = "2026-10-08.12";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -2568,7 +2568,7 @@ function renderTable(rows) {
 
 function renderDateTotals(rows) {
   if (!els.dateTotalsBody) return;
-  const groupBy = els.detailGroupBy.value || "day";
+  const groupBy = els.detailGroupBy.value === "total" ? "day" : els.detailGroupBy.value || "day";
   const byPeriod = new Map();
   rows.forEach((row) => {
     if (row.date === "Без даты") return;
@@ -2886,6 +2886,15 @@ function getPeriodInfo(isoDate, mode) {
   }
   const d = isoToDate(isoDate);
   if (!d) return { key: isoDate, label: isoDate, sortDate: isoDate };
+  if (mode === "total") {
+    const from = normalizeFilterDate(els.dateFrom.value);
+    const to = normalizeFilterDate(els.dateTo.value);
+    return { key: "total", label: from && to ? `${formatDate(from)} — ${formatDate(to)}` : "За выбранный период", sortDate: from || "0000-01-01" };
+  }
+  if (mode === "year") {
+    const year = String(d.getFullYear());
+    return { key: year, label: year, sortDate: `${year}-01-01` };
+  }
 
   if (mode === "month") {
     const y = d.getFullYear();

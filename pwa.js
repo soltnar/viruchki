@@ -11,7 +11,7 @@
   new MutationObserver(syncNav).observe(app, { attributes: true, attributeFilter: ['class'] });
   syncNav();
   const mobile = window.matchMedia('(max-width: 700px)');
-  const views = { app: 'period', compareSection: 'compare', revenueSection: 'revenue', seasonalitySection: 'analytics' };
+  const views = { compareSection: 'compare', revenueSection: 'revenue', seasonalitySection: 'analytics', mobileSettings: 'settings' };
   const showView = (view) => {
     document.body.dataset.mobileView = view;
     nav.querySelectorAll('button').forEach((button) => {
@@ -55,15 +55,29 @@
   mobile.addEventListener('change', syncDisclosures);
   syncDisclosures();
   const filters = document.querySelector('#app > .panel.filters');
-  const extraFilters = document.createElement('div');
-  extraFilters.className = 'mobile-extra-filters';
-  const filterGroups = [...filters.children].filter((element) => element.classList.contains('filter-group') && !element.classList.contains('data-range-group'));
-  if (filterGroups.length) {
-    filterGroups[0].before(extraFilters);
-    filterGroups.forEach((element) => extraFilters.append(element));
-    fold(extraFilters, 'Рестораны, склады и фильтры');
-    syncDisclosures();
-  }
+  const relocations = [];
+  const relocate = (element, destination) => {
+    if (!element || !destination) return;
+    const marker = document.createComment('desktop-position');
+    element.before(marker);
+    relocations.push({ element, destination, marker });
+  };
+  [...filters.children].filter((element) => element.classList.contains('filter-group') &&
+    !element.classList.contains('data-range-group') && !element.querySelector('#restaurantFilter'))
+    .forEach((element) => relocate(element, document.getElementById('mobileSettingsFilters')));
+  relocate(document.querySelector('#revenueSection > .mobile-disclosure'), document.getElementById('mobileSettingsDisplay'));
+  relocate(document.getElementById('dateTotalsHeading'), document.getElementById('mobileDailyDetail'));
+  relocate(document.getElementById('dateTotalsWrap'), document.getElementById('mobileDailyDetail'));
+  const syncLayout = (isMobile = mobile.matches) => {
+    relocations.forEach(({ element, destination, marker }) => {
+      if (isMobile) destination.append(element);
+      else marker.after(element);
+    });
+  };
+  mobile.addEventListener('change', () => syncLayout());
+  window.addEventListener('beforeprint', () => syncLayout(false));
+  window.addEventListener('afterprint', () => syncLayout());
+  syncLayout();
   const refresh = document.getElementById('mobileRefreshRevenue');
   const originalRefresh = document.getElementById('refreshApiData');
   const status = document.getElementById('apiStatus');

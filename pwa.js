@@ -20,7 +20,7 @@
       button.setAttribute('aria-current', active ? 'page' : 'false');
     });
   };
-  showView('period');
+  showView('revenue');
   nav.addEventListener('click', (event) => {
     const button = event.target.closest('[data-section]');
     if (!button) return;
@@ -54,6 +54,28 @@
   const syncDisclosures = () => disclosures.forEach((details) => { details.open = !mobile.matches; });
   mobile.addEventListener('change', syncDisclosures);
   syncDisclosures();
+  const filters = document.querySelector('#app > .panel.filters');
+  const extraFilters = document.createElement('div');
+  extraFilters.className = 'mobile-extra-filters';
+  const filterGroups = [...filters.children].filter((element) => element.classList.contains('filter-group') && !element.classList.contains('data-range-group'));
+  if (filterGroups.length) {
+    filterGroups[0].before(extraFilters);
+    filterGroups.forEach((element) => extraFilters.append(element));
+    fold(extraFilters, 'Рестораны, склады и фильтры');
+    syncDisclosures();
+  }
+  const refresh = document.getElementById('mobileRefreshRevenue');
+  const originalRefresh = document.getElementById('refreshApiData');
+  const status = document.getElementById('apiStatus');
+  refresh.addEventListener('click', () => originalRefresh.click());
+  const syncRefresh = () => {
+    refresh.disabled = originalRefresh.disabled;
+    refresh.textContent = originalRefresh.disabled ? 'Загружаем выручку…' : 'Обновить выручку из Saby';
+    document.getElementById('mobileRevenueStatus').textContent = status.textContent.trim();
+  };
+  new MutationObserver(syncRefresh).observe(originalRefresh, { attributes: true, attributeFilter: ['disabled'] });
+  new MutationObserver(syncRefresh).observe(status, { childList: true, subtree: true, characterData: true });
+  syncRefresh();
   const syncNetwork = () => { document.getElementById('networkStatus').hidden = navigator.onLine; };
   window.addEventListener('online', syncNetwork);
   window.addEventListener('offline', syncNetwork);

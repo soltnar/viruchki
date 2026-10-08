@@ -1067,6 +1067,9 @@ dialog li { margin: 12px 0; line-height: 1.5; }
 }
 
 .mobile-disclosure > summary { display: none; }
+.mobile-live-actions { display: none; }
+.panel.filters > .mobile-disclosure { grid-column: 1 / -1; }
+.mobile-extra-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 @media screen and (max-width: 700px) {
   html { -webkit-text-size-adjust: 100%; }
   body { background: #f4f6fa; font-family: -apple-system, BlinkMacSystemFont, "Manrope", sans-serif; }
@@ -1088,10 +1091,20 @@ dialog li { margin: 12px 0; line-height: 1.5; }
   body[data-mobile-view="compare"] #app > #compareSection,
   body[data-mobile-view="revenue"] #app > #revenueSection,
   body[data-mobile-view="revenue"] #app > #chartSection,
+  body[data-mobile-view="revenue"] #app > .panel.filters,
+  body[data-mobile-view="revenue"] #app > #stats,
+  body[data-mobile-view="revenue"] #app > #sabySection,
   body[data-mobile-view="analytics"] #app > #weatherImpactSection,
   body[data-mobile-view="analytics"] #app > #seasonalitySection,
   body[data-mobile-view="analytics"] #app > #forecastSection { display: block; }
   body[data-mobile-view="period"] #app > #stats { display: grid; order: -1; grid-template-columns: 1fr 1fr; border: 0; padding: 0; background: transparent; }
+  body[data-mobile-view="revenue"] #app > #stats { display: grid; order: 0; grid-template-columns: 1fr 1fr; border: 0; padding: 0; background: transparent; }
+  body[data-mobile-view="revenue"] #app > .panel.filters { order: -1; }
+  .mobile-extra-filters { grid-template-columns: 1fr; }
+  .mobile-live-actions { display: none; }
+  body[data-mobile-view="revenue"] .mobile-live-actions { display: block; order: 0; padding: 0 2px; }
+  .mobile-live-actions button { width: 100%; background: #087f75; color: #fff; border: 0; font-weight: 700; }
+  .mobile-live-actions .hint { margin: 8px 0 0; font-size: 11px; }
   .hero { order: -2; }
   body.weather-impact-off[data-mobile-view="analytics"] #app > #weatherImpactSection { display: none; }
   #stats .stat:first-child { grid-column: 1 / -1; background: #142c3d; color: #fff; }
@@ -1148,6 +1161,7 @@ dialog li { margin: 12px 0; line-height: 1.5; }
   .bg-shape,
   .mobile-nav,
   .mobile-picker,
+  .mobile-live-actions,
   .network-status,
   #installHelp,
   .hero,

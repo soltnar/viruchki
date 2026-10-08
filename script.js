@@ -20,7 +20,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-10-08.13";
+const APP_VERSION = "2026-10-08.14";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -2900,7 +2900,7 @@ function getPeriodInfo(isoDate, mode) {
   if (mode === "total") {
     const from = normalizeFilterDate(els.dateFrom.value);
     const to = normalizeFilterDate(els.dateTo.value);
-    return { key: "total", label: from && to ? `${formatDate(from)} — ${formatDate(to)}` : "За выбранный период", sortDate: from || "0000-01-01" };
+    return { key: "total", label: from && to ? (from === to ? formatDate(from) : `${formatDate(from)} — ${formatDate(to)}`) : "За выбранный период", sortDate: from || "0000-01-01" };
   }
   if (mode === "year") {
     const year = String(d.getFullYear());

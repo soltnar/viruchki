@@ -1,5 +1,5 @@
 (() => {
-  const buildVersion = '2026-10-08.13';
+  const buildVersion = '2026-10-08.14';
   let versionCheckRunning = false;
   const checkVersion = async () => {
     if (versionCheckRunning || !navigator.onLine || location.search.includes('code=') || location.hash.includes('access_token')) return;

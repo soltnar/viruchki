@@ -15,7 +15,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-07-29.9";
+const APP_VERSION = "2026-10-08.1";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -151,18 +151,17 @@ els.dateTo.addEventListener("change", onFilterDateRangeChange);
 els.warehouseType.addEventListener("change", applyFilters);
 els.compareMode.addEventListener("change", () => {
   toggleCompareCustom();
-  updateComparePeriodSelectors(state.rows);
-  applyFilters();
+  loadRevenueFromApi();
 });
 els.comparePeriodA.addEventListener("change", applyFilters);
 els.comparePeriodB.addEventListener("change", applyFilters);
-els.comparePrevFrom.addEventListener("change", applyFilters);
-els.comparePrevTo.addEventListener("change", applyFilters);
+els.comparePrevFrom.addEventListener("change", loadRevenueFromApi);
+els.comparePrevTo.addEventListener("change", loadRevenueFromApi);
 els.chartGroupBy.addEventListener("change", applyFilters);
 els.chartCompareView.addEventListener("change", applyFilters);
 els.enableComparison.addEventListener("change", () => {
   updateComparisonUI();
-  applyFilters();
+  loadRevenueFromApi();
 });
 els.showWeatherImpact.addEventListener("change", () => {
   state.showWeatherImpact = Boolean(els.showWeatherImpact.checked);
@@ -351,6 +350,7 @@ async function refreshRevenueFromSaby() {
 
 async function requestRevenueData(forceRefresh) {
   if (state.apiLoading) return;
+  const selectedRestaurants = Array.from(els.restaurantFilter.selectedOptions || []).map((item) => item.value);
   const from = els.apiDateFrom.value;
   const to = els.apiDateTo.value;
   if (!from || !to || from > to) {
@@ -384,7 +384,25 @@ async function requestRevenueData(forceRefresh) {
     if (!response.ok) throw new Error(payload.error || `Ошибка ${response.status}`);
     if (!Array.isArray(payload.rows)) throw new Error("Сервис вернул данные в неизвестном формате");
 
-    const periodRows = payload.rows.filter((row) => row.date >= from && row.date <= to);
+    let periodRows = payload.rows.filter((row) => row.date >= from && row.date <= to);
+    const previousRange = isComparisonEnabled()
+      ? resolvePreviousRange({ from, to }, els.compareMode.value)
+      : null;
+    if (previousRange && previousRange.from <= previousRange.to) {
+      const previousResponse = await fetch(
+        `${REVENUE_API_URL}?from=${encodeURIComponent(previousRange.from)}&to=${encodeURIComponent(previousRange.to)}`,
+        { cache: "no-store", headers: { Authorization: `Bearer ${accessToken}`, apikey: SUPABASE_PUBLISHABLE_KEY } }
+      );
+      const previousPayload = await previousResponse.json();
+      if (!previousResponse.ok || !Array.isArray(previousPayload.rows)) {
+        throw new Error(previousPayload.error || "Не удалось загрузить период сравнения");
+      }
+      const uniqueRows = new Map();
+      [...periodRows, ...previousPayload.rows].forEach((row) => {
+        uniqueRows.set(`${row.date}|${row.warehouseId || row.restaurant}`, row);
+      });
+      periodRows = [...uniqueRows.values()];
+    }
     const validRows = periodRows
       .map((row) => ({
         date: String(row.date || ""),
@@ -405,6 +423,9 @@ async function requestRevenueData(forceRefresh) {
     els.dateFrom.value = from;
     els.dateTo.value = to;
     populateRestaurantFilter(state.rows);
+    Array.from(els.restaurantFilter.options).forEach((item) => {
+      item.selected = selectedRestaurants.includes(item.value);
+    });
     updateComparePeriodSelectors(state.rows);
     applyFilters();
 
@@ -1720,7 +1741,7 @@ function toggleCompareCustom() {
   const customGroups = document.querySelectorAll(".compare-custom");
   customGroups.forEach((el) => el.classList.toggle("visible", isCustom));
   const presetGroups = document.querySelectorAll(".compare-preset");
-  presetGroups.forEach((el) => el.classList.toggle("visible", !isCustom));
+  presetGroups.forEach((el) => el.classList.remove("visible"));
 }
 
 function updateComparisonUI() {
@@ -1770,6 +1791,7 @@ function renderComparison(rows, from, to) {
   }
 
   const currentTotal = sumByRange(rows, currentRange.from, currentRange.to);
+  const previousRows = rows.filter((row) => row.date >= previousRange.from && row.date <= previousRange.to);
   const previousTotal = sumByRange(rows, previousRange.from, previousRange.to);
   const diff = currentTotal - previousTotal;
   const pct = previousTotal === 0 ? null : (diff / previousTotal) * 100;
@@ -1783,12 +1805,12 @@ function renderComparison(rows, from, to) {
     </article>
     <article class="stat stat--previous">
       <p class="stat-title">Предыдущий период (${formatDate(previousRange.from)} - ${formatDate(previousRange.to)})</p>
-      <p class="stat-value">${formatMoney(previousTotal)}</p>
+      <p class="stat-value">${previousRows.length ? formatMoney(previousTotal) : "Нет данных"}</p>
     </article>
     <article class="stat ${diffClass}">
       <p class="stat-title">Разница</p>
-      <p class="stat-value">${diff >= 0 ? "+" : ""}${formatMoney(diff)}${pct == null ? "" : ` (${diff >= 0 ? "+" : ""}${pct.toFixed(1)}%)`}</p>
-      <p class="stat-meta">${diffLabel}</p>
+      <p class="stat-value">${previousRows.length ? `${diff >= 0 ? "+" : ""}${formatMoney(diff)}${pct == null ? "" : ` (${diff >= 0 ? "+" : ""}${pct.toFixed(1)}%)`}` : "Нет базы сравнения"}</p>
+      <p class="stat-meta">${previousRows.length ? diffLabel : "За выбранные даты прошлого периода нет записей"}</p>
     </article>
   `;
 }
@@ -1809,20 +1831,14 @@ function resolvePreviousRange(currentRange, mode) {
     if (!prevFrom || !prevTo) return null;
     return { from: prevFrom, to: prevTo };
   }
-  const selectedA = els.comparePeriodA.value;
-  const selectedB = els.comparePeriodB.value;
-  if (selectedA && selectedB) {
-    const optA = state.compareOptions.find((o) => o.key === selectedA);
-    const optB = state.compareOptions.find((o) => o.key === selectedB);
-    if (optA && optB) {
-      currentRange.from = optA.from;
-      currentRange.to = optA.to;
-      return { from: optB.from, to: optB.to };
-    }
-  }
   const fromDate = isoToDate(currentRange.from);
   const toDate = isoToDate(currentRange.to);
   if (!fromDate || !toDate) return null;
+  if (mode === "previous") {
+    const days = Math.round((Date.UTC(toDate.getFullYear(), toDate.getMonth(), toDate.getDate()) -
+      Date.UTC(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())) / 86400000) + 1;
+    return { from: dateToIso(addDays(fromDate, -days)), to: dateToIso(addDays(fromDate, -1)) };
+  }
 
   if (mode === "wow") {
     return {
@@ -1875,7 +1891,10 @@ function addMonths(d, months) {
 
 function addYears(d, years) {
   const out = new Date(d);
+  const month = out.getMonth();
+  out.setDate(1);
   out.setFullYear(out.getFullYear() + years);
+  out.setDate(Math.min(d.getDate(), new Date(out.getFullYear(), month + 1, 0).getDate()));
   return out;
 }
 

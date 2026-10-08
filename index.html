@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20261008-1" />
+    <link rel="stylesheet" href="./styles.css?v=20261008-2" />
   </head>
   <body>
     <div class="bg-shape bg-shape-1"></div>
@@ -34,7 +34,7 @@
         <p>
           Все рестораны, кухня и бар. Выберите даты, оцените результат и сравните его с прошлым периодом.
         </p>
-        <p class="hint">Версия: <span id="appVersion">2026-10-08.1</span></p>
+        <p class="hint">Версия: <span id="appVersion">2026-10-08.2</span></p>
       </header>
 
       <section id="sabySection" class="panel">
@@ -149,7 +149,8 @@
             <h2>Сезонность</h2>
           </summary>
           <div class="collapsible-content">
-            <p class="hint">Анализ зависимости выручки от месяца и дня недели (рабочее окно 10:00-23:00).</p>
+            <p class="hint" id="seasonalityHistory">Раскройте блок для загрузки истории за последние 24 месяца.</p>
+            <p class="hint">Сравниваем среднюю дневную выручку месяцев разных лет и дней недели. Индекс 100% — средний день всей истории. Неполные месяцы видны в таблице; для выбора сильного и слабого месяца нужно минимум 20 дней. Изменение состава ресторанов может влиять на результат.</p>
             <div class="stats" id="seasonalityStats"></div>
             <div class="seasonality-grid">
               <div>
@@ -193,7 +194,8 @@
             <h2>Прогноз выручки</h2>
           </summary>
           <div class="collapsible-content">
-            <p class="hint">Прогноз строится на базе текущей выборки: средний день + поправка на день недели и месяц.</p>
+            <p class="hint" id="forecastHistory">Раскройте блок для загрузки накопленной истории.</p>
+            <p class="hint">Прогноз на ближайшие 31 день учитывает последние продажи, день недели и тренд. Минимум 56 дней истории. Точность оценивается на последних 14 днях отдельно от обучения.</p>
             <div class="filters forecast-filters">
               <div class="filter-group">
                 <label for="forecastFrom">Период прогноза: с даты</label>
@@ -213,7 +215,7 @@
               </div>
               <div class="filter-group">
                 <label>&nbsp;</label>
-                <button id="buildForecast" type="button">Построить прогноз</button>
+                <button id="buildForecast" type="button">Обновить историю и прогноз</button>
               </div>
             </div>
             <div class="stats" id="forecastStats"></div>
@@ -377,6 +379,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="./script.js?v=20261008-1"></script>
+    <script src="./script.js?v=20261008-2"></script>
   </body>
 </html>

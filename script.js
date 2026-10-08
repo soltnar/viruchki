@@ -7,6 +7,10 @@ const state = {
   compareOptions: [],
   chartMeta: null,
   apiLoading: false,
+  analyticsRows: [],
+  analyticsHistoryKey: "",
+  analyticsLoading: false,
+  analyticsError: "",
   exclusionRules: [],
   showWeatherImpact: true,
   weatherByCityDate: { nn: {}, dzer: {} },
@@ -15,7 +19,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-10-08.1";
+const APP_VERSION = "2026-10-08.2";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -204,10 +208,13 @@ els.chart.addEventListener("mouseleave", hideChartTooltip);
 els.chart.addEventListener("touchstart", onChartPointerMove, { passive: true });
 els.chart.addEventListener("touchmove", onChartPointerMove, { passive: true });
 els.chart.addEventListener("touchend", hideChartTooltip);
-if (els.forecastFrom) els.forecastFrom.addEventListener("change", () => renderForecast(state.filteredRows));
-if (els.forecastTo) els.forecastTo.addEventListener("change", () => renderForecast(state.filteredRows));
-if (els.forecastMode) els.forecastMode.addEventListener("change", () => renderForecast(state.filteredRows));
-if (els.buildForecast) els.buildForecast.addEventListener("click", () => renderForecast(state.filteredRows));
+if (els.forecastFrom) els.forecastFrom.addEventListener("change", renderHistoricalAnalytics);
+if (els.forecastTo) els.forecastTo.addEventListener("change", renderHistoricalAnalytics);
+if (els.forecastMode) els.forecastMode.addEventListener("change", renderHistoricalAnalytics);
+if (els.buildForecast) els.buildForecast.addEventListener("click", () => loadAnalyticsHistory(true));
+[els.seasonalityDetails, els.forecastDetails].forEach((details) => {
+  details?.addEventListener("toggle", () => { if (details.open) loadAnalyticsHistory(); });
+});
 toggleCompareCustom();
 updateComparisonUI();
 updateWarehouseActionButtons();
@@ -1322,11 +1329,69 @@ function applyFilters() {
   renderComparison(baseRows, from, to);
   updateWeatherForRows(state.filteredRows);
   renderWeatherImpact(state.filteredRows);
-  renderSeasonality(state.filteredRows);
-  renderForecast(state.filteredRows);
+  renderHistoricalAnalytics();
   renderDateTotals(state.filteredRows);
   renderTable(state.filteredRows);
   renderChart(baseRows, from, to);
+}
+
+async function loadAnalyticsHistory(force = false) {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(new Date());
+  const end = dateToIso(addDays(isoToDate(today), -1));
+  const start = dateToIso(addYears(isoToDate(today), -2));
+  const key = `${start}/${end}`;
+  if (state.analyticsLoading || (!force && state.analyticsHistoryKey === key)) return;
+  state.analyticsLoading = true;
+  state.analyticsError = "";
+  renderHistoricalAnalytics();
+  try {
+    const { data } = await supabaseClient.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error("Войдите снова для загрузки истории");
+    const rows = [];
+    for (let cursor = start; cursor <= end;) {
+      const chunkEnd = [dateToIso(addDays(isoToDate(cursor), 365)), end].sort()[0];
+      const response = await fetch(`${REVENUE_API_URL}?from=${cursor}&to=${chunkEnd}`, {
+        cache: "no-store", headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_PUBLISHABLE_KEY }
+      });
+      const payload = await response.json();
+      if (!response.ok || !Array.isArray(payload.rows)) throw new Error(payload.error || "История недоступна");
+      rows.push(...payload.rows.map((row) => ({
+        date: row.date, restaurant: row.restaurant, revenue: Number(row.revenue), source: "Saby API"
+      })).filter((row) => /^\d{4}-\d{2}-\d{2}$/.test(row.date) && row.restaurant && Number.isFinite(row.revenue)));
+      cursor = dateToIso(addDays(isoToDate(chunkEnd), 1));
+    }
+    state.analyticsRows = aggregateRows(rows);
+    state.analyticsHistoryKey = key;
+  } catch (error) {
+    state.analyticsError = error.message || "История недоступна";
+  } finally {
+    state.analyticsLoading = false;
+    renderHistoricalAnalytics();
+  }
+}
+
+function renderHistoricalAnalytics() {
+  const restaurants = Array.from(els.restaurantFilter.selectedOptions || []).map((item) => item.value);
+  const kinds = Array.from(els.warehouseType.selectedOptions || []).map((item) => item.value);
+  const counts = getGroupWarehouseCount(state.analyticsRows);
+  const rows = state.analyticsRows.filter((row) =>
+    (!restaurants.length || restaurants.includes(row.group)) &&
+    matchesWarehouseType(row, kinds, counts) && !isBlockedRestaurantName(row.warehouse)
+  );
+  const dates = [...new Set(rows.map((row) => row.date))].sort();
+  const label = state.analyticsLoading ? "Загружаем историю за последние 24 месяца…"
+    : state.analyticsError ? `Не удалось загрузить историю: ${state.analyticsError}`
+    : dates.length ? `История: ${formatDate(dates[0])} — ${formatDate(dates.at(-1))} · ${dates.length} дней с данными. Фильтры ресторанов и складов применены.`
+    : "Раскройте блок, чтобы загрузить накопленную историю за последние 24 месяца.";
+  ["seasonalityHistory", "forecastHistory"].forEach((id) => {
+    const element = document.getElementById(id);
+    if (element) element.textContent = label;
+  });
+  renderSeasonality(rows);
+  renderForecast(rows);
 }
 
 function renderSeasonality(rows) {
@@ -1352,7 +1417,7 @@ function renderSeasonality(rows) {
   dailySeries.forEach((d) => {
     const dt = isoToDate(d.date);
     if (!dt) return;
-    const m = dt.getMonth();
+    const m = d.date.slice(0, 7);
     const wd = (dt.getDay() + 6) % 7;
     const monthBucket = monthMap.get(m) || { month: m, total: 0, days: 0 };
     monthBucket.total += d.revenue;
@@ -1365,11 +1430,11 @@ function renderSeasonality(rows) {
   });
 
   const monthRows = Array.from(monthMap.values())
-    .sort((a, b) => a.month - b.month)
+    .sort((a, b) => a.month.localeCompare(b.month))
     .map((m) => {
       const avg = m.total / Math.max(1, m.days);
       const idx = overallAvg > 0 ? (avg / overallAvg) * 100 : 0;
-      return `<tr><td>${monthNames[m.month]}</td><td class="money">${formatMoney(avg)}</td><td>${Math.round(idx)}%</td></tr>`;
+      return `<tr><td>${monthNames[Number(m.month.slice(5)) - 1]} ${m.month.slice(0, 4)}<br/><small>${m.days} дней с данными</small></td><td class="money">${formatMoney(avg)}</td><td>${Math.round(idx)}%</td></tr>`;
     })
     .join("");
   els.seasonMonthBody.innerHTML = monthRows || '<tr><td class="empty" colspan="3">Нет данных</td></tr>';
@@ -1380,15 +1445,16 @@ function renderSeasonality(rows) {
       const avg = w.total / Math.max(1, w.days);
       const idx = overallAvg > 0 ? (avg / overallAvg) * 100 : 0;
       const weekendCls = w.weekday >= 5 ? "weekend-row" : "";
-      return `<tr class="${weekendCls}"><td>${WEEKDAY_NAMES[w.weekday]}</td><td class="money">${formatMoney(avg)}</td><td>${Math.round(
+      return `<tr class="${weekendCls}"><td>${WEEKDAY_NAMES[w.weekday]}<br/><small>${w.days} наблюдений</small></td><td class="money">${formatMoney(avg)}</td><td>${Math.round(
         idx
       )}%</td></tr>`;
     })
     .join("");
   els.seasonWeekdayBody.innerHTML = weekdayRows || '<tr><td class="empty" colspan="3">Нет данных</td></tr>';
 
-  const bestMonth = Array.from(monthMap.values()).sort((a, b) => b.total / b.days - a.total / a.days)[0];
-  const worstMonth = Array.from(monthMap.values()).sort((a, b) => a.total / a.days - b.total / b.days)[0];
+  const comparableMonths = Array.from(monthMap.values()).filter((month) => month.days >= 20);
+  const bestMonth = comparableMonths.sort((a, b) => b.total / b.days - a.total / a.days)[0];
+  const worstMonth = [...comparableMonths].sort((a, b) => a.total / a.days - b.total / b.days)[0];
   const bestWeekday = Array.from(weekdayMap.values()).sort((a, b) => b.total / b.days - a.total / a.days)[0];
   els.seasonalityStats.innerHTML = `
     <article class="stat">
@@ -1397,13 +1463,13 @@ function renderSeasonality(rows) {
     </article>
     <article class="stat">
       <p class="stat-title">Сильный месяц</p>
-      <p class="stat-value">${monthNames[bestMonth.month]}</p>
-      <p class="stat-meta">${formatMoney(bestMonth.total / bestMonth.days)} в день</p>
+      <p class="stat-value">${bestMonth ? `${monthNames[Number(bestMonth.month.slice(5)) - 1]} ${bestMonth.month.slice(0, 4)}` : "Мало истории"}</p>
+      <p class="stat-meta">${bestMonth ? `${formatMoney(bestMonth.total / bestMonth.days)} в день` : "Нужно не менее 20 дней в месяце"}</p>
     </article>
     <article class="stat">
       <p class="stat-title">Слабый месяц</p>
-      <p class="stat-value">${monthNames[worstMonth.month]}</p>
-      <p class="stat-meta">${formatMoney(worstMonth.total / worstMonth.days)} в день</p>
+      <p class="stat-value">${worstMonth ? `${monthNames[Number(worstMonth.month.slice(5)) - 1]} ${worstMonth.month.slice(0, 4)}` : "Мало истории"}</p>
+      <p class="stat-meta">${worstMonth ? `${formatMoney(worstMonth.total / worstMonth.days)} в день` : "Нужно не менее 20 дней в месяце"}</p>
     </article>
     <article class="stat">
       <p class="stat-title">Сильный день недели</p>
@@ -1430,6 +1496,11 @@ function renderForecast(rows) {
   const history = Array.from(dailyMap.entries())
     .map(([date, revenue]) => ({ date, revenue }))
     .sort((a, b) => a.date.localeCompare(b.date));
+  if (history.length < 56) {
+    els.forecastStats.innerHTML = `<article class="stat"><p class="stat-title">Недостаточно истории</p><p class="stat-value">${history.length} из 56 дней</p><p class="stat-meta">Для прогноза нужно минимум 8 недель с данными. Дни без записей не считаются нулевой выручкой.</p></article>`;
+    els.forecastBody.innerHTML = "";
+    return;
+  }
   const forecastMode = (els.forecastMode && els.forecastMode.value) || "base";
   const cfg = getForecastModeConfig(forecastMode);
   const profile = buildForecastProfile(history, cfg);
@@ -1437,6 +1508,10 @@ function renderForecast(rows) {
   const maxHistoryDate = history[history.length - 1].date;
   const defaultFrom = dateToIso(addDays(isoToDate(maxHistoryDate), 1));
   const defaultTo = dateToIso(addDays(isoToDate(maxHistoryDate), 7));
+  if (els.forecastFrom.value && els.forecastFrom.value <= maxHistoryDate) {
+    els.forecastFrom.value = defaultFrom;
+    els.forecastTo.value = defaultTo;
+  }
   if (els.forecastFrom && !normalizeFilterDate(els.forecastFrom.value)) els.forecastFrom.value = defaultFrom;
   if (els.forecastTo && !normalizeFilterDate(els.forecastTo.value)) els.forecastTo.value = defaultTo;
 
@@ -1450,8 +1525,15 @@ function renderForecast(rows) {
     els.forecastBody.innerHTML = '<tr><td class="empty" colspan="3">Некорректный диапазон дат</td></tr>';
     return;
   }
+  const horizon = Math.round((toDate - fromDate) / 86400000) + 1;
+  if (from <= maxHistoryDate || horizon > 31 || to > dateToIso(addDays(isoToDate(maxHistoryDate), 31))) {
+    els.forecastStats.innerHTML = '<article class="stat"><p class="stat-value">Выберите ближайшие будущие даты</p><p class="stat-meta">Прогноз доступен на следующие 31 день после последнего дня истории.</p></article>';
+    els.forecastBody.innerHTML = "";
+    return;
+  }
 
-  const forecastRows = buildForecastRows(history, fromDate, toDate, profile, cfg);
+  const forecastRows = buildForecastRows(history, isoToDate(defaultFrom), toDate, profile, cfg).filter((row) => row.date >= from);
+  const validation = validateForecastHistory(history, cfg);
 
   const total = forecastRows.reduce((sum, row) => sum + row.revenue, 0);
   const avg = total / Math.max(1, forecastRows.length);
@@ -1470,6 +1552,16 @@ function renderForecast(rows) {
       <p class="stat-value">${formatMoney(avg)}</p>
       <p class="stat-meta">Режим: ${cfg.label}. Модель: адаптивный уровень + день недели/месяц + лаг 7 дней.</p>
     </article>
+    <article class="stat">
+      <p class="stat-title">Ошибка на последних 14 днях</p>
+      <p class="stat-value">${validation ? `${(validation.error * 100).toFixed(1)}%` : "Недостаточно данных"}</p>
+      <p class="stat-meta">Средняя абсолютная ошибка / фактическая выручка. Меньше — лучше. Проверка без использования будущих данных.</p>
+    </article>
+    <article class="stat">
+      <p class="stat-title">Ориентировочный диапазон суммы</p>
+      <p class="stat-value">${validation ? `${formatMoney(total * Math.max(0, 1 - validation.error))} — ${formatMoney(total * (1 + validation.error))}` : "Нет оценки"}</p>
+      <p class="stat-meta">На основе исторической ошибки; это сценарный диапазон, не гарантия и не статистический доверительный интервал.</p>
+    </article>
   `;
 
   els.forecastBody.innerHTML = forecastRows
@@ -1480,6 +1572,19 @@ function renderForecast(rows) {
       )}</td></tr>`;
     })
     .join("");
+}
+
+function validateForecastHistory(history, cfg) {
+  const end = isoToDate(history.at(-1).date);
+  const start = dateToIso(addDays(end, -13));
+  const train = history.filter((row) => row.date < start);
+  const actual = history.filter((row) => row.date >= start);
+  if (train.length < 42 || actual.length < 10) return null;
+  const predicted = new Map(buildForecastRows(train, isoToDate(start), end, buildForecastProfile(train, cfg), cfg)
+    .map((row) => [row.date, row.revenue]));
+  const total = actual.reduce((sum, row) => sum + Math.abs(row.revenue), 0);
+  if (!total) return null;
+  return { error: actual.reduce((sum, row) => sum + Math.abs(row.revenue - predicted.get(row.date)), 0) / total };
 }
 
 function buildForecastProfile(historyDailyRows, cfg) {

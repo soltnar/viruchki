@@ -1,5 +1,5 @@
 (() => {
-  const buildVersion = '2026-10-08.14';
+  const buildVersion = '2026-10-09.1';
   let versionCheckRunning = false;
   const checkVersion = async () => {
     if (versionCheckRunning || !navigator.onLine || location.search.includes('code=') || location.hash.includes('access_token')) return;
@@ -62,7 +62,6 @@
     details.append(summary, element);
     disclosures.push(details);
   };
-  fold(document.querySelector('#revenueSection .table-controls'), 'Настройки списка и экспорт');
   fold(document.querySelector('#chartSection .chart-controls'), 'Настройки графика');
   ['weatherImpactSection', 'seasonalitySection', 'forecastSection'].forEach((id) => {
     const section = document.getElementById(id);
@@ -88,7 +87,9 @@
   [...filters.children].filter((element) => element.classList.contains('filter-group') &&
     !element.classList.contains('data-range-group') && !element.querySelector('#restaurantFilter'))
     .forEach((element) => relocate(element, document.getElementById('mobileSettingsFilters')));
-  relocate(document.querySelector('#revenueSection > .mobile-disclosure'), document.getElementById('mobileSettingsDisplay'));
+  relocate(document.querySelector('#revenueSection .table-controls'), document.getElementById('mobileSettingsDisplay'));
+  relocate(document.getElementById('exportExcel'), document.getElementById('settingsExportButtons'));
+  relocate(document.getElementById('exportPdf'), document.getElementById('settingsExportButtons'));
   relocate(document.getElementById('dateTotalsHeading'), document.getElementById('mobileDailyDetail'));
   relocate(document.getElementById('dateTotalsWrap'), document.getElementById('mobileDailyDetail'));
   relocate(document.getElementById('accessPanel'), document.getElementById('mobileSettings'));

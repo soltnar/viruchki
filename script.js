@@ -20,7 +20,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-10-08.14";
+const APP_VERSION = "2026-10-09.1";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -2943,18 +2943,33 @@ function exportToPdf() {
   const from = normalizeFilterDate(els.dateFrom.value);
   const to = normalizeFilterDate(els.dateTo.value);
   const range = resolveCurrentRange(state.filteredRows, from, to);
-  const previousTitle = document.title;
   const stamp = range
     ? `${formatDateForFileName(range.from)}-${formatDateForFileName(range.to)}`
     : new Date().toISOString().slice(0, 10);
-  document.title = `Выручка_ресторанов_${stamp}`;
-  const restoreTitle = () => {
-    document.title = previousTitle;
-  };
-  window.addEventListener("afterprint", restoreTitle, { once: true });
-  setTimeout(restoreTitle, 1200);
-  updatePrintModeFlags();
-  window.print();
+  try {
+    const sections = [{ title: "Итоги", rows: [["Общая выручка", formatMoney(state.filteredRows.reduce((sum,row)=>sum+row.revenue,0))]] },
+      { title: "Выручка по ресторанам", rows: groupRowsForTable(state.filteredRows).flatMap(group=>[[group.periodLabel,group.group,formatMoney(group.total)],...(state.showWarehouses && state.expandedGroups.has(group.key)?group.items.map(item=>[group.periodLabel,item.warehouse,formatMoney(item.revenue)]):[])]) }];
+    const tableRows = (id) => [...document.getElementById(id).querySelectorAll('tr')].map(row=>[...row.cells].map(cell=>cell.textContent.trim()));
+    const daily=tableRows('dateTotalsBody');
+    if(daily.length)sections.push({title:"Итоги и погода",rows:daily});
+    for(const [details,body,title] of [[els.seasonalityDetails,'seasonMonthBody','Сезонность по месяцам'],[els.seasonalityDetails,'seasonWeekdayBody','По дням недели'],[els.forecastDetails,'forecastBody','Прогноз']]) {
+      if(details?.open)sections.push({title,rows:tableRows(body)});
+    }
+    if(els.compareDetails.open && isComparisonEnabled())sections.push({title:"Сравнение периодов",rows:[...els.compareStats.querySelectorAll('.stat')].map(card=>[card.innerText.replace(/\s+/g,' ')])});
+    if(els.compareDetails.open && isComparisonEnabled() && state.chartMeta)sections.push({title:"График выручки",rows:[],image:els.chart});
+    if(state.showWeatherImpact && buildWeatherRevenueSeries(getAnalyticsRows()).length>=30 && !state.weatherLoading)sections.push({title:"Связь погоды и выручки",rows:[...els.weatherImpactStats.querySelectorAll('.stat')].map(card=>[card.innerText.replace(/\s+/g,' ')])});
+    if(sections.reduce((sum,section)=>sum+section.rows.length,0)>1500)throw new Error('Слишком много строк. Выберите группировку по месяцам или за весь период и повторите экспорт.');
+    const blob=window.RevenuePDF.createReport({period:range.from===range.to?formatDate(range.from):`${formatDate(range.from)} - ${formatDate(range.to)}`,sections});
+    const file=new File([blob],`Выручка_${stamp}.pdf`,{type:'application/pdf'});
+    const dialog=document.getElementById('pdfReady');
+    const link=document.getElementById('pdfDownload');
+    if(link.dataset.url)URL.revokeObjectURL(link.dataset.url);
+    link.href=URL.createObjectURL(blob);link.dataset.url=link.href;link.download=file.name;
+    const share=document.getElementById('pdfShare');share.hidden=!navigator.canShare?.({files:[file]});
+    share.onclick=async()=>{try{await navigator.share({files:[file],title:'Выручка ресторанов'});}catch(error){if(error.name!=='AbortError')document.getElementById('pdfStatus').textContent='Нажмите «Открыть / скачать PDF».';}};
+    document.getElementById('pdfStatus').textContent='Файл готов. На iPhone выберите «Поделиться» → «Сохранить в Файлы».';
+    dialog.showModal();
+  } catch(error) { alert(`Не удалось создать PDF: ${error.message}`); }
 }
 
 function exportToExcelPivot() {

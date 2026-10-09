@@ -20,7 +20,7 @@ const state = {
   weatherRequestSeq: 0
 };
 
-const APP_VERSION = "2026-10-09.1";
+const APP_VERSION = "2026-10-09.2";
 const SUPABASE_URL = "https://wqxbnwcdkobgeyhdmqup.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WzfB8mJAOBXpeNWa34hBEQ_11QhCyqa";
 const REVENUE_API_URL = `${SUPABASE_URL}/functions/v1/revenue-api`;
@@ -2947,11 +2947,12 @@ function exportToPdf() {
     ? `${formatDateForFileName(range.from)}-${formatDateForFileName(range.to)}`
     : new Date().toISOString().slice(0, 10);
   try {
-    const sections = [{ title: "Итоги", rows: [["Общая выручка", formatMoney(state.filteredRows.reduce((sum,row)=>sum+row.revenue,0))]] },
-      { title: "Выручка по ресторанам", rows: groupRowsForTable(state.filteredRows).flatMap(group=>[[group.periodLabel,group.group,formatMoney(group.total)],...(state.showWarehouses && state.expandedGroups.has(group.key)?group.items.map(item=>[group.periodLabel,item.warehouse,formatMoney(item.revenue)]):[])]) }];
+    const compactRows = from === to || els.detailGroupBy.value === "total";
+    const reportRow=(date,name,value)=>compactRows?[name,formatMoney(value)]:[date,name,formatMoney(value)];
+    const sections = [{ title: "Выручка по ресторанам", headers: compactRows?["Ресторан / склад","Выручка"]:["Период","Ресторан / склад","Выручка"], rows: groupRowsForTable(state.filteredRows).flatMap(group=>[reportRow(group.periodLabel,group.group,group.total),...(state.showWarehouses && state.expandedGroups.has(group.key)?group.items.map(item=>reportRow(group.periodLabel,item.warehouse,item.revenue)):[])]) }];
     const tableRows = (id) => [...document.getElementById(id).querySelectorAll('tr')].map(row=>[...row.cells].map(cell=>cell.textContent.trim()));
     const daily=tableRows('dateTotalsBody');
-    if(daily.length)sections.push({title:"Итоги и погода",rows:daily});
+    if(daily.length)sections.push({title:"Итоги и погода",headers:["Дата / период","Выручка","Погода"],rows:daily});
     for(const [details,body,title] of [[els.seasonalityDetails,'seasonMonthBody','Сезонность по месяцам'],[els.seasonalityDetails,'seasonWeekdayBody','По дням недели'],[els.forecastDetails,'forecastBody','Прогноз']]) {
       if(details?.open)sections.push({title,rows:tableRows(body)});
     }
@@ -2959,7 +2960,8 @@ function exportToPdf() {
     if(els.compareDetails.open && isComparisonEnabled() && state.chartMeta)sections.push({title:"График выручки",rows:[],image:els.chart});
     if(state.showWeatherImpact && buildWeatherRevenueSeries(getAnalyticsRows()).length>=30 && !state.weatherLoading)sections.push({title:"Связь погоды и выручки",rows:[...els.weatherImpactStats.querySelectorAll('.stat')].map(card=>[card.innerText.replace(/\s+/g,' ')])});
     if(sections.reduce((sum,section)=>sum+section.rows.length,0)>1500)throw new Error('Слишком много строк. Выберите группировку по месяцам или за весь период и повторите экспорт.');
-    const blob=window.RevenuePDF.createReport({period:range.from===range.to?formatDate(range.from):`${formatDate(range.from)} - ${formatDate(range.to)}`,sections});
+    const cards=[["Общая выручка",formatMoney(state.filteredRows.reduce((sum,row)=>sum+row.revenue,0))],["Ресторанов",String(new Set(state.filteredRows.map(row=>row.group)).size)],["Дней в выборке",String(getUniqueDatedDayCount(state.filteredRows))]];
+    const blob=window.RevenuePDF.createReport({period:range.from===range.to?formatDate(range.from):`${formatDate(range.from)} - ${formatDate(range.to)}`,sections,cards});
     const file=new File([blob],`Выручка_${stamp}.pdf`,{type:'application/pdf'});
     const dialog=document.getElementById('pdfReady');
     const link=document.getElementById('pdfDownload');

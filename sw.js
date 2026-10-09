@@ -1,4 +1,4 @@
-const CACHE = 'revenue-offline-v8';
+const CACHE = 'revenue-offline-v9';
 const ROOT = new URL('./', self.location.href);
 const OFFLINE = new URL('offline.html', ROOT).href;
 self.addEventListener('install', (event) => {
@@ -13,7 +13,7 @@ self.addEventListener('activate', (event) => {
       const url = new URL(client.url);
       if (url.origin !== ROOT.origin || !url.pathname.startsWith(ROOT.pathname) ||
           url.searchParams.has('code') || /access_token|error=/.test(url.hash)) continue;
-      url.searchParams.set('v', '20261009-1');
+      url.searchParams.set('v', '20261009-2');
       await client.navigate(url.href);
     }
   }));
